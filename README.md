@@ -6,10 +6,10 @@ This repository is the **single entry point for reusable programming lessons and
 
 | Track | Current material | Destination in future hub |
 |---|---|---|
-| REST APIs | [REST API Complete Tutorial](REST_API_Complete_Tutorial.md), [Learning FastAPI](https://github.com/MeiRR17/Learning_FastAPI) | `tracks/backend/fastapi/` |
+| REST APIs | [REST API Complete Tutorial](REST_API_Complete_Tutorial.md), [FastAPI tutorial (imported)](tracks/backend/fastapi/) | `tracks/backend/fastapi/` |
 | Containers | [Docker complete guide](docker-complete-guide-hebrew.md) | `tracks/devops/docker/` |
-| Java exercises | [JAVA](https://github.com/MeiRR17/JAVA) | `tracks/languages/java/` |
-| C and algorithms | [Sudoku](https://github.com/MeiRR17/Sudoku) | `tracks/languages/c/algorithms/` |
+| Java exercises | [Java anagram example (imported)](tracks/languages/java/) | `tracks/languages/java/` |
+| C and algorithms | [C Sudoku example (imported)](tracks/languages/c/sudoku/) | `tracks/languages/c/algorithms/` |
 | GUI/game experiments | [AirRaid](https://github.com/MeiRR17/AirRaid), [GalaxyFlare](https://github.com/MeiRR17/GalaxyFlare) | `tracks/game-dev/` |
 
 ## Cisco material
@@ -26,3 +26,7 @@ The existing [Cisco Telephony REST API guide](Cisco_Telephony_REST_API_Complete_
 This initial PR creates the public navigation point only. Physical history-preserving imports and archival are **not** performed.
 
 See [consolidation checklist](LEARNING-CONSOLIDATION-PLAN.md).
+
+## Imported public examples
+
+The FastAPI tutorial, Java anagram example, and C Sudoku exercise now have tracked copies under [`tracks/`](tracks/) with immutable [source provenance](tracks/IMPORT_PROVENANCE.md). Original repositories are retained for their full Git history and unimported material. Build/runtime verification and archival decisions are separate follow-ups.
