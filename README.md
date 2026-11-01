@@ -12,8 +12,9 @@ This repository is the **single entry point for reusable programming lessons and
 | C and algorithms | [C Sudoku example (imported)](tracks/languages/c/sudoku/) | `tracks/languages/c/algorithms/` |
 | GUI/game experiments | [AirRaid](https://github.com/MeiRR17/AirRaid), [GalaxyFlare](https://github.com/MeiRR17/GalaxyFlare) | `tracks/game-dev/` |
 
-## Cisco material
-The existing [Cisco Telephony REST API guide](Cisco_Telephony_REST_API_Complete_Guide_Hebrew.md) is still here. Before moving or publishing any Cisco-specific content, review it for proprietary/internal diagrams, credentials, addresses and organizational details. Organization-specific operational knowledge belongs in the responsible private organization repository; generic REST/Docker learning material can remain public.
+## Cisco-specific material
+
+Cisco/telephony training documentation is maintained by `DevTeam1770/Knowledge-Base` (private organizational repository), rather than this public personal learning hub. Reusable general REST API and Docker tutorials remain here. Access to organization-private documentation requires authorized GitHub membership; no internal content should be copied into this public repository.
 
 ## Migration rules
 - First **link** the existing labs here; never delete/move historical repos before confirming their full content and git history.
