@@ -1,0 +1,239 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-11-03",
+  "canonical_repository": "MeiRR17/Learning_Modules",
+  "source_count": 5,
+  "copied_files": 18,
+  "exact_copies": 14,
+  "adapted_copies": 4,
+  "sources": [
+    {
+      "repository": "MeiRR17/Google-Drive-Downloader",
+      "commit": "fc4b7ad764984b3ea9e73f259ccbd8eb370ffc72",
+      "destination_directory": "tools/google-drive-downloader",
+      "excluded_files": []
+    },
+    {
+      "repository": "MeiRR17/Youtube-Downloader",
+      "commit": "f4553b505314c2517ca94b5f592ddfe09f671a6e",
+      "destination_directory": "tools/youtube-downloader",
+      "excluded_files": [
+        "youtube_urls.txt"
+      ]
+    },
+    {
+      "repository": "MeiRR17/TaamAI",
+      "commit": "4db3d6c7c1050a302fb53ddd69d23bbf9fe6b2c3",
+      "destination_directory": "tools/taam-cantillation",
+      "excluded_files": []
+    },
+    {
+      "repository": "MeiRR17/Neo4j",
+      "commit": "65ddd4b706fadeede98b4c67eee232ae49c56a21",
+      "destination_directory": "tools/neo4j-sefaria",
+      "excluded_files": [
+        "README.md",
+        "docker-compose.yml"
+      ]
+    },
+    {
+      "repository": "MeiRR17/Video_to_text",
+      "commit": "6eb3af7edf3492949d394efa02a69a83230b39a0",
+      "destination_directory": "tools/whisper-transcription",
+      "excluded_files": [
+        "Input/",
+        "output/",
+        "README.md"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "source_repository": "MeiRR17/Google-Drive-Downloader",
+      "source_commit": "fc4b7ad764984b3ea9e73f259ccbd8eb370ffc72",
+      "source_path": ".gitignore",
+      "source_blob_sha": "3b6e4246a475d979d06f49a20e2a663d6778336d",
+      "destination": "tools/google-drive-downloader/.gitignore",
+      "destination_blob_sha": "3b6e4246a475d979d06f49a20e2a663d6778336d",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/Google-Drive-Downloader",
+      "source_commit": "fc4b7ad764984b3ea9e73f259ccbd8eb370ffc72",
+      "source_path": "README.md",
+      "source_blob_sha": "15eeff0625e1ebb097b931870dbd5d9e1439af07",
+      "destination": "tools/google-drive-downloader/README.md",
+      "destination_blob_sha": "15eeff0625e1ebb097b931870dbd5d9e1439af07",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/Google-Drive-Downloader",
+      "source_commit": "fc4b7ad764984b3ea9e73f259ccbd8eb370ffc72",
+      "source_path": "auto_downloader.py",
+      "source_blob_sha": "e50ea63e7eed590d1c8150325c1c54e1b5b6bbe0",
+      "destination": "tools/google-drive-downloader/auto_downloader.py",
+      "destination_blob_sha": "e50ea63e7eed590d1c8150325c1c54e1b5b6bbe0",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/Youtube-Downloader",
+      "source_commit": "f4553b505314c2517ca94b5f592ddfe09f671a6e",
+      "source_path": "README.md",
+      "source_blob_sha": "84d48836205ca3b0ec890f939c955de063730141",
+      "destination": "tools/youtube-downloader/README.md",
+      "destination_blob_sha": "84d48836205ca3b0ec890f939c955de063730141",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/Youtube-Downloader",
+      "source_commit": "f4553b505314c2517ca94b5f592ddfe09f671a6e",
+      "source_path": "requirements.txt",
+      "source_blob_sha": "5c686f6f6d925eeea70d8a305424c4fc76057558",
+      "destination": "tools/youtube-downloader/requirements.txt",
+      "destination_blob_sha": "5c686f6f6d925eeea70d8a305424c4fc76057558",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/Youtube-Downloader",
+      "source_commit": "f4553b505314c2517ca94b5f592ddfe09f671a6e",
+      "source_path": "youtube_downloader.py",
+      "source_blob_sha": "79fc2d67c699465b3985b76343db403fb49659d8",
+      "destination": "tools/youtube-downloader/youtube_downloader.py",
+      "destination_blob_sha": "79fc2d67c699465b3985b76343db403fb49659d8",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/TaamAI",
+      "source_commit": "4db3d6c7c1050a302fb53ddd69d23bbf9fe6b2c3",
+      "source_path": "README.md",
+      "source_blob_sha": "c76b03090f54a1e08174fa2212194cc9b8bd3577",
+      "destination": "tools/taam-cantillation/README.md",
+      "destination_blob_sha": "c76b03090f54a1e08174fa2212194cc9b8bd3577",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/TaamAI",
+      "source_commit": "4db3d6c7c1050a302fb53ddd69d23bbf9fe6b2c3",
+      "source_path": "cantillation_pipeline.py",
+      "source_blob_sha": "0dca19d473355e4bbdbe1b11330141a569aab6df",
+      "destination": "tools/taam-cantillation/cantillation_pipeline.py",
+      "destination_blob_sha": "0dca19d473355e4bbdbe1b11330141a569aab6df",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/TaamAI",
+      "source_commit": "4db3d6c7c1050a302fb53ddd69d23bbf9fe6b2c3",
+      "source_path": "requirements.txt",
+      "source_blob_sha": "d43548aaff4c0470fc6945688ac0087d14bb050c",
+      "destination": "tools/taam-cantillation/requirements.txt",
+      "destination_blob_sha": "d43548aaff4c0470fc6945688ac0087d14bb050c",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/Neo4j",
+      "source_commit": "65ddd4b706fadeede98b4c67eee232ae49c56a21",
+      "source_path": "cypher/03_import_to_neo4j.cypher",
+      "source_blob_sha": "c8b96a4b7adade3a26e4424c4efd47b91a82cb48",
+      "destination": "tools/neo4j-sefaria/cypher/03_import_to_neo4j.cypher",
+      "destination_blob_sha": "c8b96a4b7adade3a26e4424c4efd47b91a82cb48",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/Neo4j",
+      "source_commit": "65ddd4b706fadeede98b4c67eee232ae49c56a21",
+      "source_path": "cypher/04_analytics_queries.cypher",
+      "source_blob_sha": "f12989af67ec8561c09c0791301f8d7b8f910752",
+      "destination": "tools/neo4j-sefaria/cypher/04_analytics_queries.cypher",
+      "destination_blob_sha": "f12989af67ec8561c09c0791301f8d7b8f910752",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/Neo4j",
+      "source_commit": "65ddd4b706fadeede98b4c67eee232ae49c56a21",
+      "source_path": "scripts/01_setup_directories.ps1",
+      "source_blob_sha": "74fd92840c840a1639e19edf9148140e724f6bda",
+      "destination": "tools/neo4j-sefaria/scripts/01_setup_directories.ps1",
+      "destination_blob_sha": "74fd92840c840a1639e19edf9148140e724f6bda",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/Neo4j",
+      "source_commit": "65ddd4b706fadeede98b4c67eee232ae49c56a21",
+      "source_path": "scripts/02_acquire_sefaria_data.py",
+      "source_blob_sha": "394a7a67b0f04f16e975721300b6a652d96aa5bb",
+      "destination": "tools/neo4j-sefaria/scripts/02_acquire_sefaria_data.py",
+      "destination_blob_sha": "394a7a67b0f04f16e975721300b6a652d96aa5bb",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/Neo4j",
+      "source_commit": "65ddd4b706fadeede98b4c67eee232ae49c56a21",
+      "source_path": "scripts/05_verify_container.ps1",
+      "source_blob_sha": "a2451a4198788134f2865f33fe60f313f5ab042c",
+      "destination": "tools/neo4j-sefaria/scripts/05_verify_container.ps1",
+      "destination_blob_sha": "a2451a4198788134f2865f33fe60f313f5ab042c",
+      "transformed": false,
+      "transformation": "none"
+    },
+    {
+      "source_repository": "MeiRR17/Video_to_text",
+      "source_commit": "6eb3af7edf3492949d394efa02a69a83230b39a0",
+      "source_path": "clean_repetitions.py",
+      "source_blob_sha": "9c7ae8209c75d4774184c4abc51f955f22943ea2",
+      "destination": "tools/whisper-transcription/clean_repetitions.py",
+      "destination_blob_sha": "85c7852ed7ada80375f349a8f2933caf3eafad7d",
+      "transformed": true,
+      "transformation": "replace personal absolute macOS paths with configurable BASE_DIR/VIDEO_TO_TEXT_OUTPUT_DIR"
+    },
+    {
+      "source_repository": "MeiRR17/Video_to_text",
+      "source_commit": "6eb3af7edf3492949d394efa02a69a83230b39a0",
+      "source_path": "transcribe_all.sh",
+      "source_blob_sha": "019987e8cc01f1038a16fa58ed39a0198fd5b16f",
+      "destination": "tools/whisper-transcription/transcribe_all.sh",
+      "destination_blob_sha": "18cf2347237aebb410d2bbf01d306a6b0b6e65a2",
+      "transformed": true,
+      "transformation": "replace personal absolute macOS paths with configurable BASE_DIR/VIDEO_TO_TEXT_OUTPUT_DIR"
+    },
+    {
+      "source_repository": "MeiRR17/Video_to_text",
+      "source_commit": "6eb3af7edf3492949d394efa02a69a83230b39a0",
+      "source_path": "transcribe_audio.sh",
+      "source_blob_sha": "46991193c442f1dbae0f114e481b632bf3749d4f",
+      "destination": "tools/whisper-transcription/transcribe_audio.sh",
+      "destination_blob_sha": "2725d1607b906c76e595351314ecf3d7109ce49a",
+      "transformed": true,
+      "transformation": "replace personal absolute macOS paths with configurable BASE_DIR/VIDEO_TO_TEXT_OUTPUT_DIR"
+    },
+    {
+      "source_repository": "MeiRR17/Video_to_text",
+      "source_commit": "6eb3af7edf3492949d394efa02a69a83230b39a0",
+      "source_path": "transcribe_new.sh",
+      "source_blob_sha": "1cb40289e28bcebedd98ce71df473855d7650a2c",
+      "destination": "tools/whisper-transcription/transcribe_new.sh",
+      "destination_blob_sha": "644dab60d2b8e9850387f7a8bce5a8e9b126f34d",
+      "transformed": true,
+      "transformation": "replace personal absolute macOS paths with configurable BASE_DIR/VIDEO_TO_TEXT_OUTPUT_DIR"
+    }
+  ],
+  "notes": [
+    "No source repositories were deleted, transferred, archived or made private by code consolidation.",
+    "Original Git history remains in source repositories; only selected scripts/docs/config were copied.",
+    "Neo4j README and Docker Compose excluded due hardcoded authentication/demo deployment configuration.",
+    "YouTube input URL list excluded; original Video_to_text transcripts, recordings and generated output excluded.",
+    "Source code has not passed full functional/dependency, rights or deployment tests."
+  ]
+}
