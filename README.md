@@ -31,3 +31,9 @@ See [consolidation checklist](LEARNING-CONSOLIDATION-PLAN.md).
 ## Imported public examples
 
 The FastAPI tutorial, Java anagram example, and C Sudoku exercise now have tracked copies under [`tracks/`](tracks/) with immutable [source provenance](tracks/IMPORT_PROVENANCE.md). Original repositories are retained for their full Git history and unimported material. Build/runtime verification and archival decisions are separate follow-ups.
+
+## Small utilities — one consolidated toolbox
+
+Reusable standalone scripts from five public personal repositories now live under **[`tools/`](tools/README.md)**: Google Drive downloads, YouTube downloads, TaamAI, Sefaria/Neo4j and portable Whisper transcription. These are organized modules, not a single combined executable. The [provenance manifest](tools/IMPORT_PROVENANCE.json) pins all 18 imported source files; syntax and content-integrity CI gates were added. No media, private user input lists, transcript outputs or historical Neo4j hardcoded authentication settings were brought in.
+
+The earlier `tracks/` teaching content remains independent; legacy source repos are not deleted by the import.
