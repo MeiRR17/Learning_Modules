@@ -1,0 +1,36 @@
+name: Utilities source integrity and syntax
+
+on:
+  pull_request:
+    paths:
+      - 'tools/**'
+      - '.github/workflows/utilities-integrity.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/**'
+      - '.github/workflows/utilities-integrity.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-utilities:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify source provenance
+        run: python3 tools/verify_imports.py
+      - name: Python syntax
+        run: |
+          python3 -m py_compile tools/google-drive-downloader/auto_downloader.py
+          python3 -m py_compile tools/youtube-downloader/youtube_downloader.py
+          python3 -m py_compile tools/taam-cantillation/cantillation_pipeline.py
+          python3 -m py_compile tools/neo4j-sefaria/scripts/02_acquire_sefaria_data.py
+          python3 -m py_compile tools/whisper-transcription/clean_repetitions.py
+      - name: Bash syntax
+        run: |
+          bash -n tools/whisper-transcription/transcribe_all.sh
+          bash -n tools/whisper-transcription/transcribe_audio.sh
+          bash -n tools/whisper-transcription/transcribe_new.sh

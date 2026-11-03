@@ -1,0 +1,20 @@
+# Per-tool local results; never commit credentials, user data or media
+**/.env
+**/.env.*
+!**/.env.example
+**/credentials.json
+**/token.json
+**/*_token.pickle
+**/output/
+**/Input/
+**/__pycache__/
+**/.venv/
+**/downloads/
+**/data/
+**/logs/
+**/*.mp4
+**/*.mp3
+**/*.wav
+**/*.m4a
+**/*.srt
+**/*.vtt
