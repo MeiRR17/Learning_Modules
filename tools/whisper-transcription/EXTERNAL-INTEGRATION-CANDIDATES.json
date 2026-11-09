@@ -6,6 +6,21 @@
   "classification": "CANDIDATES_NOT_ALL_INSTALLED",
   "candidates": [
     {
+      "id": 3,
+      "name": "faster-whisper",
+      "repository": "SYSTRAN/faster-whisper",
+      "url": "https://github.com/SYSTRAN/faster-whisper",
+      "priority": "P0",
+      "target": "Corpora/IDEA",
+      "target_repository": "MeiRR17/Learning_Modules",
+      "purpose": "Local Whisper STT candidate; unify with prior PR #41",
+      "code_license_observation": "MIT",
+      "review_level": "readme+metadata",
+      "state": "candidate",
+      "installed": false,
+      "pilot_pull_request": "https://github.com/MeiRR17/Learning_Modules/pull/5"
+    },
+    {
       "id": 4,
       "name": "whisper.cpp",
       "repository": "ggml-org/whisper.cpp",
