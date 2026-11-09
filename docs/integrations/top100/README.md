@@ -1,28 +1,21 @@
-# תוכניות שילוב כלי GitHub — MeiRR17/Learning_Modules
+# מפת תוכניות האינטגרציה ב־MeiRR17/Learning_Modules
 
-הספרייה כוללת **6 תוכניות מימוש עצמאיות** שהוקצו למאגר הזה מתוך רשימה גלובלית של 57 מועמדים. תחום האחריות: תמלול ומדיה מקורית בלבד, ללא מודלים/הקלטות/תמלולים פרטיים בתוך Git.
+מיפוי הבעלות עבר סקירה שנייה לפי תוכן המאגר, לא רק לפי שם הכלי. **3 תוכניות עצמאיות** משויכות למאגר הזה. הקשר: Optional local transcription methods; public repo cannot store user recordings.
 
-**הבחנה מחייבת:** קיום תוכנית אינו התקנה, הפעלה, אישור רישוי או מוכנות לפרודקשן. `P0/P1/P2` מציין עדיפות לבדיקה; `PILOT/COMPARE/GATED/REFERENCE` הוא סוג החלטה, ולא סטטוס הצלחה. קוד פיילוט קיים אינו מופעל אוטומטית.
-
-## אינדקס מימוש לפי כלי
-
-| # | מאגר המקור ותוכנית מפורטת | עדיפות | החלטת שילוב | נחיצות |
-|---:|---|:---:|---|---|
+| # | מאגר המקור ותוכנית מימוש | עדיפות | החלטה | צורך |
+|---:|---|---|---|---|
 | 3 | [SYSTRAN/faster-whisper](./003-systran-faster-whisper.md) | P0 | PILOT | Provide a local transcription alternative when Whisper.cpp is slow or lacks timing quality. |
 | 4 | [ggml-org/whisper.cpp](./004-ggml-org-whisper-cpp.md) | P0 | EXISTING_BASELINE | Keep the existing Apple Silicon transcription scripts reliable; do not duplicate the engine. |
 | 36 | [chidiwilliams/buzz](./036-chidiwilliams-buzz.md) | P2 | REFERENCE | Offer manual review UI for local transcription outputs. |
-| 41 | [heygen-com/hyperframes](./041-heygen-com-hyperframes.md) | P0 | GATED_PILOT | Generate professionally consistent original branded video intros and captions. |
-| 51 | [OpenMontageInc/OpenMontage](./051-openmontageinc-openmontage.md) | P2 | REFERENCE | Assess integrated video studio only after HyperFrames proves insufficient. |
-| 57 | [koala73/worldmonitor](./057-koala73-worldmonitor.md) | P2 | REFERENCE | Study geopolitical monitoring UI for independent evidence-led media design. |
 
-## כללי פעולה
+## הוראות יישום
 
-1. **אין התקנה גורפת.** בוחרים לפי פער מוצר אמיתי, בודקים את הרישיון המדויק וגרסאות מודלים/דאטה, ומריצים fixture סינתטי או מורשה.
-2. **אין שני מנועים שווים לפרודקשן ללא הצדקה.** מתעדים בדיקת A/B והשוואת accuracy/latency/cost/maintenance ומחליטים על engine יחיד או fallback לפי סוג קלט.
-3. **הגנת המידע:** אין להעלות ספרים, תמלולים, הקלטות, מודלי שפה, קובצי הרשאות או נתוני מחקר מוגנים ל־GitHub או לשירות AI חיצוני.
-4. **הטמעה ממוקדת:** מתאם נקודתי בנתיב הקוד המתאים, opt-in/feature-flag, תוצאות מובנות ו־read-only ברירת מחדל, בדיקות ורישום ראיות.
-5. **מיזוג רק לאחר אימות:** PR, CI ממוקד, תוצאות אמיתיות, תיעוד rollback, וסקירה של ענפים/גרסאות קודמות. פריט שאינו נחוץ עובר ל־deferred ולא להתקנה מאולצת.
+1. לוודא חסר יכולת נוכחית לפי קוד אמיתי והענפים הפעילים; לא להסתמך רק על כוכבים או תיאור upstream.
+2. לבדוק commit/release, LICENSE, זכויות מודלים ונתונים, שרשרת תלויות, עלות והרשאות. אין פטור מרישוי כשהקוד קיים ב־GitHub.
+3. לבצע פיילוט עם fixture מורשה, baseline והשוואה מדידה. אם כלי אחר כבר פועל היטב, לשקול defer.
+4. להטמיע קוד רק behind opt-in flag, בלי כתיבה אוטומטית למקורות/פרסום/שליחת סודות, ועם אפשרות rollback.
+5. להעלות קוד + בדיקות ותוצאות מדודות ל־Draft PR ולהפעיל רק לאחר אימות בעלים.
 
-## אימות מסירה
+**חשוב:** תוכניות קיימות ≠ ספריות מותקנות ≠ בדיקות שעברו ≠ פריסה עובדת. כלי במצב REFERENCE/COMPARE/GATED לא נחשב כחיבור פעיל.
 
-השלמה של **תוכנית** דורשת קובץ Markdown ייחודי לכל כלי ברשימה. השלמה של **אינטגרציה** דורשת קוד, ריצת בדיקות, החלטת רישוי, ראיות מדודות ו־PR; אין לערבב בין שני המצבים.
+קובצי המדדים ותוצאות הבדיקות של כל כלי צריכים להיכנס ל־PR של אותו מוצר; אין להעלות תוצרי קבצים פרטיים, תמלולים או קרדנציאלים לגיטהאב.
