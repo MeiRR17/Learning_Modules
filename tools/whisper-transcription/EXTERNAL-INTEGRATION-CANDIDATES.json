@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "source": "https://github.com/MeiRR17/Corpora/pull/42",
+  "created": "2026-11-09",
+  "target_repository": "MeiRR17/Learning_Modules",
+  "classification": "CANDIDATES_NOT_ALL_INSTALLED",
+  "candidates": [
+    {
+      "id": 4,
+      "name": "whisper.cpp",
+      "repository": "ggml-org/whisper.cpp",
+      "url": "https://github.com/ggml-org/whisper.cpp",
+      "priority": "P0",
+      "target": "Mac transcription",
+      "target_repository": "MeiRR17/Learning_Modules",
+      "purpose": "Compare on-device ASR with Apple Silicon backend and Hebrew recordings",
+      "code_license_observation": "MIT",
+      "review_level": "metadata",
+      "state": "candidate",
+      "installed": false
+    },
+    {
+      "id": 36,
+      "name": "buzz",
+      "repository": "chidiwilliams/buzz",
+      "url": "https://github.com/chidiwilliams/buzz",
+      "priority": "P2",
+      "target": "Mac transcription",
+      "target_repository": "MeiRR17/Learning_Modules",
+      "purpose": "Standalone Whisper desktop GUI alternative for manual local transcription and review",
+      "code_license_observation": "MIT",
+      "review_level": "readme+metadata",
+      "state": "candidate",
+      "installed": false
+    },
+    {
+      "id": 41,
+      "name": "hyperframes",
+      "repository": "heygen-com/hyperframes",
+      "url": "https://github.com/heygen-com/hyperframes",
+      "priority": "P0",
+      "target": "Media/YouTube production",
+      "target_repository": "MeiRR17/Learning_Modules",
+      "purpose": "Deterministic HTML/CSS-to-MP4 pipeline; owned/cleared audio, fonts and graphics only",
+      "code_license_observation": "Apache-2.0",
+      "review_level": "readme+metadata",
+      "state": "candidate",
+      "installed": false
+    },
+    {
+      "id": 51,
+      "name": "OpenMontage",
+      "repository": "OpenMontageInc/OpenMontage",
+      "url": "https://github.com/OpenMontageInc/OpenMontage",
+      "priority": "P2",
+      "target": "Media production",
+      "target_repository": "MeiRR17/Learning_Modules",
+      "purpose": "Complete agentic video studio reference only; AGPL-3.0 and high operations footprint",
+      "code_license_observation": "AGPL-3.0",
+      "review_level": "readme+metadata",
+      "state": "candidate",
+      "installed": false
+    },
+    {
+      "id": 57,
+      "name": "worldmonitor",
+      "repository": "koala73/worldmonitor",
+      "url": "https://github.com/koala73/worldmonitor",
+      "priority": "P2",
+      "target": "C14-style news media",
+      "target_repository": "MeiRR17/Learning_Modules",
+      "purpose": "Geopolitical news dashboard reference, AGPL-3.0; no automatic content republishing",
+      "code_license_observation": "AGPL-3.0",
+      "review_level": "metadata",
+      "state": "candidate",
+      "installed": false
+    }
+  ]
+}
