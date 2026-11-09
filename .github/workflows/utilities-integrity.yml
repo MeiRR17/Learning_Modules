@@ -34,3 +34,5 @@ jobs:
           bash -n tools/whisper-transcription/transcribe_all.sh
           bash -n tools/whisper-transcription/transcribe_audio.sh
           bash -n tools/whisper-transcription/transcribe_new.sh
+      - name: Optional faster-whisper synthetic local tests
+        run: python3 -m unittest discover -s tools/whisper-transcription -p test_transcribe_faster_whisper.py -v

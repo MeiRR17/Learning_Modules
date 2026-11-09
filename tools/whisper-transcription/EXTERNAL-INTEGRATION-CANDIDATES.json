@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "source": "Independent public upstream source audit; no private repository identifiers included.",
+  "created": "2026-11-09",
+  "target_repository": "MeiRR17/Learning_Modules",
+  "classification": "CANDIDATES_NOT_ALL_INSTALLED",
+  "candidates": [
+    {
+      "repository": "SYSTRAN/faster-whisper",
+      "url": "https://github.com/SYSTRAN/faster-whisper",
+      "priority": "P0",
+      "purpose": "Local Whisper STT candidate; unify with prior PR #41",
+      "code_license_observation": "MIT",
+      "adoption_decision": "PILOT"
+    },
+    {
+      "repository": "ggml-org/whisper.cpp",
+      "url": "https://github.com/ggml-org/whisper.cpp",
+      "priority": "P0",
+      "purpose": "Compare on-device ASR with Apple Silicon backend and Hebrew recordings",
+      "code_license_observation": "MIT",
+      "adoption_decision": "EXISTING_BASELINE"
+    },
+    {
+      "repository": "chidiwilliams/buzz",
+      "url": "https://github.com/chidiwilliams/buzz",
+      "priority": "P2",
+      "purpose": "Standalone Whisper desktop GUI alternative for manual local transcription and review",
+      "code_license_observation": "MIT",
+      "adoption_decision": "REFERENCE"
+    }
+  ]
+}
