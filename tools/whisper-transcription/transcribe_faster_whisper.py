@@ -45,6 +45,11 @@ def transcribe(media: Path, model_dir: Path, output_dir: Path, *,
         raise ValueError("A pre-downloaded local model directory is required")
     if not output_dir.is_dir() or output_dir.is_symlink():
         raise ValueError("Output directory must already exist")
+    repo_root = Path(__file__).resolve().parents[2]
+    if repo_root in output_dir.resolve().parents or output_dir.resolve() == repo_root:
+        raise ValueError("Keep transcripts outside this public GitHub checkout")
+    if repo_root in model_dir.resolve().parents or model_dir.resolve() == repo_root:
+        raise ValueError("Keep model weights outside this public GitHub checkout")
     if language not in ("he", "en", "auto"):
         raise ValueError("Language must be he, en or auto")
     if beam_size not in range(1, 11):
