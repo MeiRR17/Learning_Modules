@@ -51,10 +51,20 @@ python manifest_downloader.py manifest.json --folder "Course/Week 1" \
 
 Folders are matched as complete relative paths, including their descendants,
 not arbitrary string prefixes. Repeating `--folder` combines selections.
-`--limit` selects the first N matching entries in manifest order. All
-manifest entries are validated before the selection is applied, and retry
-reports include only failures from the selected entries. For complete coverage,
-run without `--limit` after smaller batches.
+Use `--offset` together with `--limit` to page through matching entries
+in stable manifest order (the default offset is zero):
+
+```bash
+python manifest_downloader.py manifest.json --limit 10 --offset 0
+python manifest_downloader.py manifest.json --limit 10 --offset 10
+python manifest_downloader.py manifest.json --limit 10 --offset 20
+```
+
+Folder filtering happens before offset and limit are applied. All manifest
+entries are validated before selection, and retry reports include only
+failures from the selected page. If the input manifest changes between
+runs, offsets may no longer refer to the same files. To cover the full
+manifest, run every page or finish with an unfiltered, unlimited run.
 
 Download files you are authorized to access:
 
