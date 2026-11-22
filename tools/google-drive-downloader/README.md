@@ -220,6 +220,29 @@ both conditions. Matching files and offline verification do not require
 transfer-size estimates. The JSON plan is still written even when either
 preflight condition fails.
 
+Check that the destination filesystem has enough free space for the batch:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --dry-run --plan-out batch-plan.json --plan-inspect-local \
+  --min-free-space 2147483648 --fail-on-disk-space-plan
+```
+
+`--fail-on-disk-space-plan` requires `--dry-run` and
+`--plan-inspect-local`. It compares current free space with the sum of
+known estimated remaining-transfer bytes and the
+`--min-free-space` reserve (2 GiB in this example). Unknown estimates
+fail the `disk_space_estimate_known` check, while insufficient free
+space fails `disk_space_available`. The plan includes a `disk_space`
+object with `free_bytes`, `estimated_remaining_bytes`,
+`reserved_bytes`, `required_bytes`, and the filesystem lookup path.
+The check uses the closest existing ancestor when the output directory
+does not yet exist. Disk-use lookup errors are reported in the plan
+and fail preflight. This is a point-in-time capacity estimate, not a
+guarantee: concurrent disk activity, temporary files, and nested mount
+points may affect actual available space. No directories or downloads
+are created during the dry-run check.
+
 Enforce a remaining-transfer budget during preflight:
 
 ```bash
@@ -287,7 +310,7 @@ Its `passed` field is true only if every **enabled** preflight
 policy passes. `checks` is empty when no preflight policy was
 enabled; that means no policy was evaluated, not that all files are safe.
 Supported check codes are `blocked_files`, `quarantine_required`, `unknown_transfer_size`,
-`transfer_size_known`, and `estimated_transfer_budget`.
+`transfer_size_known`, `estimated_transfer_budget`, `disk_space_estimate_known`, and `disk_space_available`.
 Each check exposes the observed count or byte estimate and its limit.
 The plan is written before a failing preflight exits nonzero, so
 automation can examine `failed_codes` directly.
