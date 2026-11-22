@@ -21,6 +21,22 @@ mismatched sizes or checksums are **not overwritten**. New downloads are also
 checked against any supplied expectations. Size alone can detect truncation,
 but does not prove file integrity.
 
+Reserve available storage during large batches:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --min-free-space 10737418240 --failed-manifest failed.json
+```
+
+`--min-free-space` accepts a nonnegative byte count; the example reserves
+10 GiB. Before invoking yt-dlp for each new file, the downloader checks
+the destination filesystem's free bytes. If the manifest provides a
+`size`, it requires enough free space for that file **plus** the reserve;
+otherwise only the reserve can be checked before downloading. Insufficient
+space is recorded as a per-file failure and can be retried later. This is a
+preflight safeguard, not a guarantee: concurrent processes can consume
+space during downloads, and yt-dlp may use temporary files.
+
 For integrity-sensitive archives, require SHA-256 checksums on every selected
 file:
 
