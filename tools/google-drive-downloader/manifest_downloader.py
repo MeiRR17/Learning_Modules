@@ -146,6 +146,8 @@ def main(argv: list[str] | None = None) -> int:
                       help="Preview destinations without downloading or verifying")
     mode.add_argument("--verify-only", action="store_true",
                       help="Audit local files without network access or downloading")
+    parser.add_argument("--require-sha256", action="store_true",
+                        help="Reject selected files without an expected SHA-256 digest")
     parser.add_argument("--attempts", type=int, default=3)
     parser.add_argument("--max-failures", type=int,
                         help="Stop the batch after N failed files (default: no limit)")
@@ -340,6 +342,16 @@ def main(argv: list[str] | None = None) -> int:
             downloads = downloads[start:start + args.limit]
         else:
             downloads = downloads[start:]
+        if args.require_sha256:
+            missing_checksums = [
+                relative.as_posix() for _, relative, checksum, _ in downloads
+                if checksum is None
+            ]
+            if missing_checksums:
+                parser.error(
+                    "--require-sha256: missing checksum for "
+                    + ", ".join(missing_checksums)
+                )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(f"Invalid manifest: {exc}")
 
@@ -593,7 +605,7 @@ def main(argv: list[str] | None = None) -> int:
                 # Only reconcile retained failures once this entry has a
                 # definitive outcome. An interrupted pending entry must keep
                 # its earlier retry record.
-                if args.retain_failures and outcome["status"] != "pending":
+                if args.retain_failures and not args.dry_run and outcome["status"] != "pending":
                     folder_key = relative.parent.as_posix()
                     existing = failed_entries.get(folder_key, [])
                     matching = [item for item in existing if item["name"] == relative.name]
