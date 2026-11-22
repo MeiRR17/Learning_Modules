@@ -395,7 +395,6 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if args.failed_manifest and not args.dry_run:
-    if args.failed_manifest and not args.dry_run:
         # Retain previously unresolved entries only when explicitly requested.
         try:
             write_retry_manifest(args.failed_manifest.expanduser(), failed_entries)
