@@ -177,6 +177,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Write selected files and declared metadata to JSON (also in dry-run)")
     parser.add_argument("--plan-inspect-local", action="store_true",
                         help="Inspect local destinations and partial files in --plan-out")
+    parser.add_argument("--fail-on-blocked-plan", action="store_true",
+                        help="In dry-run, exit nonzero if the inspected plan contains blocked files")
     parser.add_argument("--cursor-out", type=Path,
                         help="Write a JSON checkpoint containing the last processed path")
     parser.add_argument("--folder", action="append", default=[],
@@ -201,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--retain-failures requires --failed-manifest")
     if args.plan_inspect_local and not args.plan_out:
         parser.error("--plan-inspect-local requires --plan-out")
+    if args.fail_on_blocked_plan and not (args.plan_inspect_local and args.dry_run):
+        parser.error("--fail-on-blocked-plan requires --plan-inspect-local and --dry-run")
     if args.only_failed and not args.retain_failures:
         parser.error("--only-failed requires --retain-failures")
     if args.only_failed and (args.after is not None or args.cursor_in or args.offset or args.cursor_out):
@@ -628,6 +632,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Failed to write batch plan: {exc}", file=sys.stderr)
             return 1
         print(f"Batch plan written: {args.plan_out}")
+        if args.fail_on_blocked_plan:
+            blocked = plan["local_inspection"]["blocked_or_invalid"]
+            if blocked:
+                print(
+                    f"Preflight blocked: {blocked} selected file(s) cannot proceed.",
+                    file=sys.stderr,
+                )
+                return 1
     cookies = args.cookies.expanduser().resolve() if args.cookies else None
     if cookies and not args.verify_only and not args.dry_run and not cookies.is_file():
         parser.error(f"Cookies file does not exist: {cookies}")
