@@ -120,8 +120,16 @@ new `.part` file occupies the original paths. It also attempts to restore
 the previous partial file, if one was quarantined. The failed download
 remains a failure in the status and retry reports, even when restoration
 succeeds. In `--status-out`, the `quarantine_restore` value is
-`restored`, `original_restored`, `deferred_outputs_present`,
-`original_restore_failed`, or `partial_restore_failed`. When a move
+`restored`, `restored_backup_retained`, `original_restored`,
+`deferred_outputs_present`, `original_restore_failed`, or
+`partial_restore_failed`. `restored_backup_retained` means the
+original destination was restored, but removing at least one old backup
+name failed. In this case `quarantine_cleanup_errors` records the
+`original` and/or `partial` cleanup errors, and the corresponding
+backup path remains available for manual cleanup. If a partial-file
+restoration fails after the original is restored, its status remains
+`partial_restore_failed`; any earlier original-backup cleanup error is
+still recorded. When a move
 fails, `quarantine_restore_error` records the filesystem error.
 Remaining `quarantined_backup` and `quarantined_partial_backup`
 paths indicate backups that still need attention. Restoration uses exclusive
