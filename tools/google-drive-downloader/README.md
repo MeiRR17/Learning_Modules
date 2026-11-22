@@ -65,6 +65,22 @@ python manifest_downloader.py manifest.json --folder "Course/Week 1" \
 
 Folders are matched as complete relative paths, including their descendants,
 not arbitrary string prefixes. Repeating `--folder` combines selections.
+Use `--exclude-folder` to omit entire subtrees, including when they fall
+inside a selected parent:
+
+```bash
+python manifest_downloader.py manifest.json --folder "Course" \
+  --exclude-folder "Course/Archived" --exclude-folder "Course/Drafts" \
+  --limit 20 --cursor-out checkpoint.json
+```
+
+Exclusions are applied after folder inclusion but before `--offset`,
+`--after`, `--cursor-in`, and `--limit`. Thus pagination counts only
+files that remain eligible. Checkpoints record `excluded_folders` and
+reject resume attempts where `--exclude-folder` differs from the original
+run. Older checkpoints lacking this field imply no exclusions. All manifest
+entries are still validated and protected against output/report collisions,
+including excluded files.
 Use `--offset` together with `--limit` to page through matching entries
 in stable manifest order (the default offset is zero):
 
