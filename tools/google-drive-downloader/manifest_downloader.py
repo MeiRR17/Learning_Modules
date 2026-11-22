@@ -952,6 +952,42 @@ def main(argv: list[str] | None = None) -> int:
         }
         write_retry_manifest(args.cursor_out.expanduser(), checkpoint)
 
+    def restore_quarantine_after_failure(outcome: dict, destination: Path) -> None:
+        """Restore preserved originals after any per-file failure, if safe."""
+        if not args.restore_quarantine_on_failure or "quarantined_backup" not in outcome:
+            return
+        original_backup = root / outcome["quarantined_backup"]
+        partial_backup = (
+            root / outcome["quarantined_partial_backup"]
+            if "quarantined_partial_backup" in outcome else None
+        )
+        part_path = destination.with_name(destination.name + ".part")
+        # Preserve both sets of evidence if the failed attempt wrote
+        # anything. Never overwrite a new output, even a zero-byte file.
+        if (
+            destination.exists() or destination.is_symlink()
+            or part_path.exists() or part_path.is_symlink()
+        ):
+            outcome["quarantine_restore"] = "deferred_outputs_present"
+            return
+        try:
+            original_backup.rename(destination)
+        except OSError as exc:
+            outcome["quarantine_restore"] = "original_restore_failed"
+            outcome["quarantine_restore_error"] = str(exc)
+            return
+        outcome["quarantine_restore"] = "original_restored"
+        outcome.pop("quarantined_backup", None)
+        if partial_backup is not None:
+            try:
+                partial_backup.rename(part_path)
+            except OSError as exc:
+                outcome["quarantine_restore"] = "partial_restore_failed"
+                outcome["quarantine_restore_error"] = str(exc)
+                return
+            outcome.pop("quarantined_partial_backup", None)
+        outcome["quarantine_restore"] = "restored"
+
     try:
         for index, (file_id, relative, checksum, size) in enumerate(downloads, start=1):
             # Check before selecting the next file: all previous outcomes have
@@ -1153,41 +1189,16 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"  Retry {attempt + 1}/{args.attempts} in {delay:g}s.", flush=True)
                         time.sleep(delay)
                 if failure:
-                    if args.restore_quarantine_on_failure and "quarantined_backup" in outcome:
-                        original_backup = root / outcome["quarantined_backup"]
-                        partial_backup = (
-                            root / outcome["quarantined_partial_backup"]
-                            if "quarantined_partial_backup" in outcome else None
-                        )
-                        # Never replace a new completed file or partial output.
-                        # If either exists, retain the original backups.
-                        if destination.exists() or destination.is_symlink() or (
-                            part_path.exists() or part_path.is_symlink()
-                        ):
-                            outcome["quarantine_restore"] = "deferred_outputs_present"
-                        else:
-                            try:
-                                original_backup.rename(destination)
-                                outcome["quarantine_restore"] = "original_restored"
-                                outcome.pop("quarantined_backup", None)
-                                if partial_backup is not None:
-                                    try:
-                                        partial_backup.rename(part_path)
-                                    except OSError as restore_exc:
-                                        outcome["quarantine_restore"] = "partial_restore_failed"
-                                        outcome["quarantine_restore_error"] = str(restore_exc)
-                                    else:
-                                        outcome["quarantine_restore"] = "restored"
-                                        outcome.pop("quarantined_partial_backup", None)
-                            except OSError as restore_exc:
-                                outcome["quarantine_restore"] = "original_restore_failed"
-                                outcome["quarantine_restore_error"] = str(restore_exc)
                     fail(failure)
                 else:
                     outcome["status"] = "downloaded"
             except OSError as exc:
                 fail(f"File operation failed: {exc}")
             finally:
+                # Run recovery even if a filesystem exception interrupted the
+                # download path after quarantine succeeded.
+                if outcome["status"] == "failed":
+                    restore_quarantine_after_failure(outcome, destination)
                 # Only reconcile retained failures once this entry has a
                 # definitive outcome. An interrupted pending entry must keep
                 # its earlier retry record.
