@@ -728,7 +728,13 @@ python manifest_downloader.py manifest.json --output downloads \
 `--max-download-seconds` takes a finite positive number of seconds.
 Before each yt-dlp invocation, the downloader caps its effective
 timeout at the lesser of `--timeout` (if specified) and the remaining
-batch download-time budget. Time used by subprocess invocations is
+batch download-time budget. Each attempt record includes
+`effective_timeout_seconds` when a timeout applies. Timed-out attempts
+also record `timeout_source` as `timeout` (the per-attempt setting)
+or `max_download_seconds` (the remaining batch budget). When the batch
+budget determines the timeout, further attempts are suppressed even if
+clock measurement reports a tiny amount of remaining time; the original
+timeout failure is preserved. Time used by subprocess invocations is
 accumulated across files and retries with a monotonic clock, including
 timed-out and failed attempts. Backoff waits, local hashing, and
 filesystem work do not count toward this limit; it is **not** a
