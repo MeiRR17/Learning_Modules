@@ -481,6 +481,33 @@ def main(argv: list[str] | None = None) -> int:
                     "estimated_remaining_bytes": None,
                 }
             try:
+                # Verification never downloads, resumes, or quarantines files.
+                # Keep the plan's actions aligned with --verify-only rather
+                # than suggesting network work that the command will not do.
+                if args.verify_only:
+                    if not destination.is_file():
+                        return {
+                            "local_state": "missing" if not destination.exists() else "unsafe",
+                            "planned_action": "blocked",
+                            "estimated_remaining_bytes": 0,
+                        }
+                    local_bytes = destination.stat().st_size
+                    invalid = (
+                        local_bytes == 0
+                        or (size is not None and local_bytes != size)
+                        or (
+                            args.max_file_size is not None
+                            and local_bytes > args.max_file_size
+                        )
+                        or (checksum is not None and sha256_file(destination) != checksum)
+                    )
+                    return {
+                        "local_state": "invalid" if invalid else "matching",
+                        "planned_action": "blocked" if invalid else "verify",
+                        "local_bytes": local_bytes,
+                        "estimated_remaining_bytes": 0,
+                        "integrity_verified": checksum is not None and not invalid,
+                    }
                 if size is not None and args.max_file_size is not None and size > args.max_file_size:
                     return {
                         "local_state": "oversized", "planned_action": "blocked",
@@ -570,6 +597,9 @@ def main(argv: list[str] | None = None) -> int:
             "declared_bytes": sum(size or 0 for _, _, _, size in downloads),
             "unknown_size_count": sum(size is None for _, _, _, size in downloads),
             "files": planned_files,
+            "mode": "verify-only" if args.verify_only else (
+                "dry-run" if args.dry_run else "download"
+            ),
         }
         if args.plan_inspect_local:
             estimates = [
@@ -578,7 +608,7 @@ def main(argv: list[str] | None = None) -> int:
             ]
             actions = {
                 action: sum(item["planned_action"] == action for item in planned_files)
-                for action in ("skip", "download", "resume", "quarantine_and_download", "blocked")
+                for action in ("verify", "skip", "download", "resume", "quarantine_and_download", "blocked")
             }
             plan["local_inspection"] = {
                 "actions": actions,
