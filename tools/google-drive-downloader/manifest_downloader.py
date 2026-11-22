@@ -622,15 +622,20 @@ def main(argv: list[str] | None = None) -> int:
                         "estimated_remaining_bytes": None,
                     }
                 part_bytes = part_path.stat().st_size if part_path.is_file() else 0
-                if (
-                    action != "quarantine_and_download"
-                    and size is not None and part_bytes > size
+                if action != "quarantine_and_download" and (
+                    (size is not None and part_bytes > size)
+                    or (args.max_file_size is not None and part_bytes > args.max_file_size)
                 ):
                     return {
                         "local_state": "oversized_partial",
                         "planned_action": "blocked",
                         "partial_bytes": part_bytes,
                         "estimated_remaining_bytes": None,
+                        "integrity_issue": (
+                            "partial_size_mismatch"
+                            if size is not None and part_bytes > size
+                            else "partial_file_size_limit"
+                        ),
                     }
                 # When quarantining, even a partial file must be moved aside
                 # and the replacement starts from scratch.
@@ -673,7 +678,7 @@ def main(argv: list[str] | None = None) -> int:
                     "unsafe_partial": "unsafe_partial",
                     "unreadable": "local_read_error",
                     "oversized": "file_size_limit",
-                    "oversized_partial": "partial_size_mismatch",
+                    "oversized_partial": inspection.get("integrity_issue", "partial_size_mismatch"),
                     "missing": "missing_for_verification",
                     "invalid": inspection.get("integrity_issue", "existing_file_mismatch"),
                 }.get(inspection["local_state"], "unavailable")
@@ -1206,16 +1211,21 @@ def main(argv: list[str] | None = None) -> int:
                 if part_path.exists() and not part_path.is_file():
                     fail("Partial download path is not a regular file.")
                     continue
-                if (
-                    size is not None and part_path.is_file()
-                    and part_path.stat().st_size > size
-                ):
-                    fail(
-                        f"Partial download exceeds expected file size "
-                        f"({part_path.stat().st_size} > {size} bytes); "
-                        "refusing unsafe resume."
-                    )
-                    continue
+                if part_path.is_file():
+                    partial_bytes = part_path.stat().st_size
+                    if size is not None and partial_bytes > size:
+                        fail(
+                            f"Partial download exceeds expected file size "
+                            f"({partial_bytes} > {size} bytes); refusing unsafe resume."
+                        )
+                        continue
+                    if args.max_file_size is not None and partial_bytes > args.max_file_size:
+                        fail(
+                            f"Partial download exceeds --max-file-size "
+                            f"({partial_bytes} > {args.max_file_size} bytes); "
+                            "refusing unsafe resume."
+                        )
+                        continue
                 command = [
                     sys.executable, "-m", "yt_dlp",
                     "--continue",
@@ -1242,16 +1252,21 @@ def main(argv: list[str] | None = None) -> int:
                     ):
                         failure = "Unsafe partial download path; refusing resume."
                         break
-                    if (
-                        size is not None and part_path.is_file()
-                        and part_path.stat().st_size > size
-                    ):
-                        failure = (
-                            "Partial download exceeds expected file size "
-                            f"({part_path.stat().st_size} > {size} bytes); "
-                            "refusing unsafe resume."
-                        )
-                        break
+                    if part_path.is_file():
+                        partial_bytes = part_path.stat().st_size
+                        if size is not None and partial_bytes > size:
+                            failure = (
+                                "Partial download exceeds expected file size "
+                                f"({partial_bytes} > {size} bytes); refusing unsafe resume."
+                            )
+                            break
+                        if args.max_file_size is not None and partial_bytes > args.max_file_size:
+                            failure = (
+                                "Partial download exceeds --max-file-size "
+                                f"({partial_bytes} > {args.max_file_size} bytes); "
+                                "refusing unsafe resume."
+                            )
+                            break
                     if args.min_free_space:
                         # yt-dlp uses a .part file for resumed downloads. Count
                         # only bytes already stored in that file; recheck space
