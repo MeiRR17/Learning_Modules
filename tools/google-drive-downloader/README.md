@@ -147,6 +147,26 @@ case folding, and refuses file/directory conflicts (for example, a file
 named `Week1` alongside the folder `Week1/`). These checks protect against
 filesystem naming differences across macOS, Windows, and Linux.
 
+Export a machine-readable download plan before transferring files:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --folder "Course/Week 1" --limit 10 --dry-run \
+  --plan-out batch-plan.json
+```
+
+`--plan-out` writes JSON with the selected files in manifest order, their
+relative paths, Drive IDs, expected byte sizes and SHA-256 values (or `null`
+when unspecified). Summary fields include `manifest_sha256`,
+`matching_entries`, `start_index`, `selected`, `declared_bytes`,
+and `unknown_size_count`. The sum includes only declared sizes, so it
+is not a complete estimate when `unknown_size_count` is nonzero.
+Plans can also be exported during normal downloads and verification.
+Unlike other progress reports, the plan is intentionally written during
+`--dry-run`; no downloads or other reports are produced in that mode.
+A plan cannot replace the input manifest, credentials, checkpoint, or any
+declared download destination.
+
 Preview the destinations:
 
 ```bash
