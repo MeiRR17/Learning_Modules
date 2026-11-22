@@ -956,6 +956,16 @@ def main(argv: list[str] | None = None) -> int:
                 for item in outcomes
             ),
             "download_attempts": sum(item.get("download_attempts", 0) for item in outcomes),
+            "attempt_outcomes": {
+                status: sum(
+                    attempt["outcome"] == status
+                    for item in outcomes for attempt in item.get("attempt_history", [])
+                )
+                for status in (
+                    "completed", "verification_failed", "nonzero_exit",
+                    "timeout", "launch_failed"
+                )
+            },
             "download_elapsed_seconds": round(
                 sum(item.get("download_elapsed_seconds", 0) for item in outcomes), 3
             ),
@@ -1223,6 +1233,7 @@ def main(argv: list[str] | None = None) -> int:
                 failure = None
                 outcome["download_attempts"] = 0
                 outcome["download_elapsed_seconds"] = 0.0
+                outcome["attempt_history"] = []
                 for attempt in range(1, args.attempts + 1):
                     # A failed attempt may have left a larger partial file.
                     # Reject that state even if the free-space reserve is off.
@@ -1264,23 +1275,28 @@ def main(argv: list[str] | None = None) -> int:
                             break
                     result = None
                     attempt_started = time.monotonic()
+                    attempt_record = {"attempt": attempt, "outcome": "launch_failed"}
                     outcome["download_attempts"] += 1
                     try:
                         result = subprocess.run(
                             command, check=False, timeout=args.timeout,
                         )
                     except subprocess.TimeoutExpired:
+                        attempt_record["outcome"] = "timeout"
                         failure = f"Download attempt timed out after {args.timeout:g}s."
                     except OSError as exc:
                         failure = f"Could not launch downloader: {exc}"
                         break
                     finally:
+                        elapsed = round(time.monotonic() - attempt_started, 3)
+                        attempt_record["elapsed_seconds"] = elapsed
+                        outcome["attempt_history"].append(attempt_record)
                         outcome["download_elapsed_seconds"] = round(
-                            outcome["download_elapsed_seconds"]
-                            + time.monotonic() - attempt_started, 3
+                            outcome["download_elapsed_seconds"] + elapsed, 3
                         )
                     if result is not None:
                         outcome["last_downloader_exit_code"] = result.returncode
+                        attempt_record["exit_code"] = result.returncode
                         if result.returncode == 0:
                             if not destination.is_file() or destination.stat().st_size == 0:
                                 failure = "Downloader succeeded but output file is missing or empty."
@@ -1292,7 +1308,11 @@ def main(argv: list[str] | None = None) -> int:
                                 failure = "Downloaded file SHA-256 mismatch."
                             else:
                                 failure = None
+                            attempt_record["outcome"] = (
+                                "completed" if failure is None else "verification_failed"
+                            )
                             break
+                        attempt_record["outcome"] = "nonzero_exit"
                         failure = f"Download failed (exit {result.returncode})."
                     if attempt < args.attempts:
                         delay = min(args.retry_delay * (2 ** (attempt - 1)), 60.0)
