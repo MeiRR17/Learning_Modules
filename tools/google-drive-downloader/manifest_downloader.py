@@ -1288,6 +1288,7 @@ def main(argv: list[str] | None = None) -> int:
                             f"Batch attempt budget exhausted after {attempts_used} "
                             "downloader attempts."
                         )
+                        outcome["retry_suppressed_reason"] = "max_total_attempts"
                         outcome["attempt_budget_exhausted"] = True
                         attempt_budget_stopped = True
                         stop_reason = "max_total_attempts"
@@ -1387,6 +1388,12 @@ def main(argv: list[str] | None = None) -> int:
                             args.max_total_attempts is not None
                             and attempts_used >= args.max_total_attempts
                         ):
+                            # Preserve the downloader's actual failure and
+                            # explain why the next retry was not scheduled.
+                            # This avoids replacing a timeout/exit-code error
+                            # with an artificial budget failure.
+                            attempt_record["retry_suppressed_reason"] = "max_total_attempts"
+                            outcome["retry_suppressed_reason"] = "max_total_attempts"
                             outcome["attempt_budget_exhausted"] = True
                             attempt_budget_stopped = True
                             stop_reason = "max_total_attempts"
