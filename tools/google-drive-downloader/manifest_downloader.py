@@ -141,6 +141,8 @@ def main(argv: list[str] | None = None) -> int:
                            help="Skip first N matching entries before --limit")
     selection.add_argument("--after", type=str,
                            help="Resume after this exact relative destination path")
+    selection.add_argument("--cursor-in", type=Path,
+                           help="Resume using a checkpoint from --cursor-out")
     args = parser.parse_args(argv)
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be a positive integer")
@@ -160,6 +162,24 @@ def main(argv: list[str] | None = None) -> int:
         ]
     except ValueError as exc:
         parser.error(f"Invalid --folder: {exc}")
+    if args.cursor_in:
+        try:
+            checkpoint = json.loads(args.cursor_in.expanduser().read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            parser.error(f"Cannot read checkpoint: {exc}")
+        if not isinstance(checkpoint, dict) or checkpoint.get("schema_version") != 1:
+            parser.error("Unsupported checkpoint format")
+        if checkpoint.get("manifest_sha256") != sha256_file(args.manifest.expanduser()):
+            parser.error("Checkpoint does not match the current manifest")
+        expected_folders = sorted(folder.as_posix() for folder in selected_folders)
+        if checkpoint.get("folders") != expected_folders:
+            parser.error("Checkpoint folder selection does not match --folder arguments")
+        if checkpoint.get("failed", 0):
+            print("Warning: checkpoint has failed entries; retry them separately.", file=sys.stderr)
+        try:
+            resume_after = relative_destination(checkpoint["after"], allow_subdirs=True)
+        except (KeyError, TypeError, ValueError) as exc:
+            parser.error(f"Invalid checkpoint cursor: {exc}")
     if args.attempts < 1 or not 0 <= args.retry_delay <= 3600:
         parser.error("Require --attempts >= 1 and 0 <= --retry-delay <= 3600")
 
@@ -320,6 +340,7 @@ def main(argv: list[str] | None = None) -> int:
         checkpoint = {
             "schema_version": 1,
             "manifest_sha256": sha256_file(args.manifest),
+            "folders": sorted(folder.as_posix() for folder in selected_folders),
             "after": downloads[-1][1].as_posix(),
             "processed": len(downloads),
             "failed": failed,
