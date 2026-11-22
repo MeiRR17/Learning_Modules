@@ -130,6 +130,15 @@ the batch fully complete. The fingerprint can be compared to detect changes
 in the input manifest between batches. The checkpoint is not written in
 `--dry-run` mode, and its path cannot be the input or failure manifest.
 
+When a selection is empty (for example, a cursor already past the final
+file), the command does not invoke yt-dlp. If report paths were supplied,
+it replaces the retry manifest with `{}`, writes a zero-entry status report,
+and writes a checkpoint with `has_more: false`. An existing input cursor is
+carried forward into the output checkpoint; with no prior cursor the `after`
+field is `null` and there is no file to resume after. No reports are
+written for an empty `--dry-run`. As with nonempty batches, using the same
+report paths replaces their prior contents.
+
 Folder filtering happens before offset and limit are applied. All manifest
 entries are validated before selection, and retry reports include only
 failures from the selected page. If the input manifest changes between
