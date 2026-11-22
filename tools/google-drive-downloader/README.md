@@ -761,6 +761,19 @@ terminal), and attempts followed by a scheduled retry include
 capped at 60 seconds, and is not included in `elapsed_seconds`.
 Terminal verification failures record a reason but do not schedule a retry
 under the current download policy.
+After yt-dlp reports a successful exit, the downloader rechecks
+destination path safety before inspecting or hashing its output.
+A post-download integrity failure is marked `verification_failed`
+and includes a machine-readable `verification_issue` in both the
+attempt-history record and the file outcome. Issue codes are
+`unsafe_output_path`, `missing_output`, `empty_output`,
+`file_size_limit`, `size_mismatch`, and `checksum_mismatch`.
+When the destination is a regular file, its measured size is recorded
+as `output_bytes` on the attempt record, including when verification
+fails. These diagnostics do not change the existing fail-closed
+behavior: corrupt downloaded outputs are not silently accepted or
+automatically retried.
+
 The stable outcome values are `completed` (process succeeded and the
 download passed verification), `verification_failed` (process exited
 successfully but output checks failed), `nonzero_exit`, `timeout`,
