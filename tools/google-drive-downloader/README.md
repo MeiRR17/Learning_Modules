@@ -119,8 +119,14 @@ The backup is kept even if the new download fails. If a matching
 `.part` file exists, it is also preserved with a unique
 `.invalid-<random-id>` suffix so yt-dlp cannot resume from stale partial
 content. Both backups are left in the download directory. A symlinked or
-non-regular partial file blocks quarantine before moving the original;
-filesystem errors while moving backups are reported as per-file failures.
+non-regular partial file blocks quarantine before moving the original.
+If the partial file is moved successfully but moving the original fails,
+the downloader attempts to restore the partial file to its previous
+location and marks the file as failed. If restoration itself fails,
+the status entry records `quarantined_partial_backup` and both errors
+so the partial content can be recovered manually. Backup moves are not
+a fully atomic filesystem transaction, so interrupted processes or
+unexpected filesystem failures may still require manual inspection.
 The option only applies to ordinary download mode, not `--verify-only`
 or `--dry-run`. Files
 rejected solely because of `--max-file-size` are **not** quarantined.
