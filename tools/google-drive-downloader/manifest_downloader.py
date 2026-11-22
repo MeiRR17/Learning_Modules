@@ -526,6 +526,19 @@ def main(argv: list[str] | None = None) -> int:
                     "estimated_remaining_bytes": None,
                 }
             try:
+                # Runtime checks manifest-declared size before either download
+                # or verification; keep both planning modes consistent.
+                if (
+                    args.max_file_size is not None
+                    and size is not None
+                    and size > args.max_file_size
+                ):
+                    return {
+                        "local_state": "oversized",
+                        "planned_action": "blocked",
+                        "blocked_reason": "file_size_limit",
+                        "estimated_remaining_bytes": None,
+                    }
                 # Verification never downloads, resumes, or quarantines files.
                 # Keep the plan's actions aligned with --verify-only rather
                 # than suggesting network work that the command will not do.
@@ -554,11 +567,6 @@ def main(argv: list[str] | None = None) -> int:
                         "estimated_remaining_bytes": 0,
                         "integrity_verified": checksum is not None and reason is None,
                         **({"integrity_issue": reason} if reason else {}),
-                    }
-                if size is not None and args.max_file_size is not None and size > args.max_file_size:
-                    return {
-                        "local_state": "oversized", "planned_action": "blocked",
-                        "estimated_remaining_bytes": None,
                     }
                 if destination.is_file():
                     local_bytes = destination.stat().st_size
