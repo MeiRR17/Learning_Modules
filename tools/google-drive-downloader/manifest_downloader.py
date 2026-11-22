@@ -1378,6 +1378,8 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     attempt_started = time.monotonic()
                     attempt_record = {"attempt": attempt, "outcome": "launch_failed"}
+                    if effective_timeout is not None:
+                        attempt_record["effective_timeout_seconds"] = effective_timeout
                     outcome["download_attempts"] += 1
                     attempts_used += 1
                     try:
@@ -1386,6 +1388,13 @@ def main(argv: list[str] | None = None) -> int:
                         )
                     except subprocess.TimeoutExpired:
                         attempt_record["outcome"] = "timeout"
+                        batch_timeout = (
+                            remaining_budget is not None
+                            and (args.timeout is None or remaining_budget <= args.timeout)
+                        )
+                        attempt_record["timeout_source"] = (
+                            "max_download_seconds" if batch_timeout else "timeout"
+                        )
                         failure = f"Download attempt timed out after {effective_timeout:g}s."
                         attempt_record["failure_reason"] = failure
                     except OSError as exc:
@@ -1424,6 +1433,18 @@ def main(argv: list[str] | None = None) -> int:
                         attempt_record["outcome"] = "nonzero_exit"
                         failure = f"Download failed (exit {result.returncode})."
                         attempt_record["failure_reason"] = failure
+                    # The OS may report a subprocess timeout just before the
+                    # monotonic sum reaches the configured budget. Treat a
+                    # batch-capped timeout as decisive rather than attempting
+                    # another launch on a tiny apparent remainder.
+                    if attempt_record.get("timeout_source") == "max_download_seconds":
+                        if attempt < args.attempts:
+                            attempt_record["retry_suppressed_reason"] = "max_download_seconds"
+                            outcome["retry_suppressed_reason"] = "max_download_seconds"
+                        if attempt < args.attempts or index < len(downloads):
+                            download_time_budget_stopped = True
+                            stop_reason = "max_download_seconds"
+                        break
                     if attempt < args.attempts:
                         if (
                             args.max_total_attempts is not None
