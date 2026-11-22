@@ -747,6 +747,33 @@ The status report records `max_download_seconds` and
 status when it interrupts the selected batch. If several limits
 apply, whichever actively prevents work is recorded.
 
+Use a wall-clock budget when retry waits and local file processing must
+also count toward the available batch time:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --max-batch-wall-seconds 900 --timeout 120 \
+  --status-out status.json --cursor-out progress.json
+```
+
+`--max-batch-wall-seconds` accepts a finite positive number of
+seconds, measured with a monotonic clock from the start of batch
+processing. It includes retry backoff, local hashing and filesystem
+work as well as yt-dlp subprocess time. The downloader checks remaining
+time before starting a new file or subprocess, reduces each subprocess
+timeout to the smallest applicable limit, and suppresses a retry whose
+scheduled backoff would exhaust the wall-clock budget. If this budget
+stops processing, `stop_reason` and `retry_suppressed_reason` use
+`max_batch_wall_seconds`, and timed-out attempts can use that value
+as `timeout_source`. The status and checkpoint JSON include
+`max_batch_wall_seconds`, `batch_wall_seconds_elapsed`, and
+`wall_time_budget_exhausted`. Existing work already underway outside
+a subprocess (such as hashing a large file or writing a report) is not
+forcibly interrupted, so the limit is a cooperative batch boundary,
+not a hard kill deadline. When combined with `--max-download-seconds`
+or `--max-total-attempts`, the first effective limiting condition
+controls subsequent attempts.
+
 Download attempt telemetry is included in `--status-out`. For each
 file that reaches the yt-dlp download loop, `download_attempts` counts
 subprocess invocations (including timed-out or failed launches),
