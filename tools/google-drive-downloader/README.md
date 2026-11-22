@@ -200,6 +200,25 @@ both conditions. Matching files and offline verification do not require
 transfer-size estimates. The JSON plan is still written even when either
 preflight condition fails.
 
+Enforce a remaining-transfer budget during preflight:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --dry-run --plan-out batch-plan.json --plan-inspect-local \
+  --max-estimated-transfer 5368709120
+```
+
+`--max-estimated-transfer` sets a nonnegative per-batch budget in bytes
+(the example permits up to 5 GiB). It requires `--dry-run` and
+`--plan-inspect-local` and checks the sum in
+`local_inspection.estimated_remaining_bytes_known`. It returns a nonzero
+exit code if the estimated remaining transfer exceeds the budget **or** if
+an actionable file has an unknown-size estimate; an unknown estimate must
+not silently bypass the budget. The JSON plan is still written.
+Blocked files are not included in the transfer estimate; pair this
+with `--fail-on-blocked-plan` to reject those as well. The estimate is
+a planning value, not a hard runtime network-transfer cap.
+
 Inspect local files and estimate how much data remains to transfer:
 
 ```bash
