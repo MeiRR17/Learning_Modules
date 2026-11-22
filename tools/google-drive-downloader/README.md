@@ -165,6 +165,13 @@ is atomically updated after each selected file, including failures; it is not
 produced in dry-run mode. If interrupted, the report preserves outcomes written
 so far, but does not itself resume the batch. Use `--cursor-in` for completed
 batch checkpoints or rerun the original manifest to skip eligible files.
+If a progress report cannot be written (for example, because the disk is
+full or permissions deny the update), the downloader prints an error and
+terminates with a nonzero exit status rather than moving on to more files.
+The last successfully written reports remain on disk. Fix the storage issue
+and resume from the last valid checkpoint, or rerun the manifest; unfinished
+files may be skipped only when they satisfy the existing-file checks.
+
 Report files cannot overwrite the manifest, cookies, or input checkpoint.
 Before downloading or generating reports, the tool also rejects collisions
 between any declared download destination and the input manifest, cookie
