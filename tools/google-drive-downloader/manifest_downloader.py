@@ -153,6 +153,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--attempts", type=int, default=3)
     parser.add_argument("--max-total-attempts", type=int, metavar="COUNT",
                         help="Cap total yt-dlp subprocess attempts across the batch")
+    parser.add_argument("--max-download-seconds", type=float, metavar="SECONDS",
+                        help="Cap cumulative yt-dlp subprocess time across the batch")
     parser.add_argument("--max-failures", type=int,
                         help="Stop the batch after N failed files (default: no limit)")
     parser.add_argument("--retry-delay", type=float, default=2.0)
@@ -331,6 +333,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("Require --attempts >= 1 and 0 <= --retry-delay <= 3600")
     if args.max_total_attempts is not None and args.max_total_attempts < 1:
         parser.error("--max-total-attempts must be a positive integer")
+    if args.max_download_seconds is not None and (
+        not math.isfinite(args.max_download_seconds) or args.max_download_seconds <= 0
+    ):
+        parser.error("--max-download-seconds must be finite and greater than zero")
     if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
         parser.error("--timeout must be a finite number greater than zero")
     if args.min_free_space < 0:
@@ -897,7 +903,9 @@ def main(argv: list[str] | None = None) -> int:
 
     failed = 0
     attempts_used = 0
+    download_seconds_used = 0.0
     attempt_budget_stopped = False
+    download_time_budget_stopped = False
     stop_reason = None
     outcomes = []
     def unresolved_failure_count() -> int:
@@ -976,6 +984,8 @@ def main(argv: list[str] | None = None) -> int:
             "download_attempts": sum(item.get("download_attempts", 0) for item in outcomes),
             "max_total_attempts": args.max_total_attempts,
             "attempt_budget_exhausted": attempt_budget_stopped,
+            "max_download_seconds": args.max_download_seconds,
+            "download_time_budget_exhausted": download_time_budget_stopped,
             "stop_reason": stop_reason,
             "unprocessed": len(downloads) - len(outcomes),
             "attempt_outcomes": {
@@ -1022,6 +1032,9 @@ def main(argv: list[str] | None = None) -> int:
             "download_attempts": attempts_used,
             "max_total_attempts": args.max_total_attempts,
             "attempt_budget_exhausted": attempt_budget_stopped,
+            "max_download_seconds": args.max_download_seconds,
+            "download_seconds_used": round(download_seconds_used, 3),
+            "download_time_budget_exhausted": download_time_budget_stopped,
             "stop_reason": stop_reason,
             "matching_entries": total_matching,
             "has_more": start + len(outcomes) < total_matching,
@@ -1112,6 +1125,14 @@ def main(argv: list[str] | None = None) -> int:
                     f"Stopping batch after {attempts_used} downloader attempts.",
                     file=sys.stderr,
                 )
+                break
+            if (
+                args.max_download_seconds is not None
+                and download_seconds_used >= args.max_download_seconds
+            ):
+                download_time_budget_stopped = True
+                stop_reason = "max_download_seconds"
+                print("Stopping batch: downloader time budget exhausted.", file=sys.stderr)
                 break
             destination = root / relative
             outcome = {"path": relative.as_posix(), "status": "pending"}
@@ -1293,6 +1314,15 @@ def main(argv: list[str] | None = None) -> int:
                         attempt_budget_stopped = True
                         stop_reason = "max_total_attempts"
                         break
+                    if (
+                        args.max_download_seconds is not None
+                        and download_seconds_used >= args.max_download_seconds
+                    ):
+                        failure = "Batch downloader time budget exhausted."
+                        outcome["retry_suppressed_reason"] = "max_download_seconds"
+                        download_time_budget_stopped = True
+                        stop_reason = "max_download_seconds"
+                        break
                     # A failed attempt may have left a larger partial file.
                     # Reject that state even if the free-space reserve is off.
                     if part_path.is_symlink() or (
@@ -1337,24 +1367,35 @@ def main(argv: list[str] | None = None) -> int:
                             )
                             break
                     result = None
+                    remaining_budget = (
+                        args.max_download_seconds - download_seconds_used
+                        if args.max_download_seconds is not None else None
+                    )
+                    effective_timeout = (
+                        min(args.timeout, remaining_budget)
+                        if args.timeout is not None and remaining_budget is not None
+                        else args.timeout if remaining_budget is None else remaining_budget
+                    )
                     attempt_started = time.monotonic()
                     attempt_record = {"attempt": attempt, "outcome": "launch_failed"}
                     outcome["download_attempts"] += 1
                     attempts_used += 1
                     try:
                         result = subprocess.run(
-                            command, check=False, timeout=args.timeout,
+                            command, check=False, timeout=effective_timeout,
                         )
                     except subprocess.TimeoutExpired:
                         attempt_record["outcome"] = "timeout"
-                        failure = f"Download attempt timed out after {args.timeout:g}s."
+                        failure = f"Download attempt timed out after {effective_timeout:g}s."
                         attempt_record["failure_reason"] = failure
                     except OSError as exc:
                         failure = f"Could not launch downloader: {exc}"
                         attempt_record["failure_reason"] = failure
                         break
                     finally:
-                        elapsed = round(time.monotonic() - attempt_started, 3)
+                        precise_elapsed = time.monotonic() - attempt_started
+                        download_seconds_used += precise_elapsed
+                        elapsed = round(precise_elapsed, 3)
                         attempt_record["elapsed_seconds"] = elapsed
                         outcome["attempt_history"].append(attempt_record)
                         outcome["download_elapsed_seconds"] = round(
@@ -1398,6 +1439,15 @@ def main(argv: list[str] | None = None) -> int:
                             attempt_budget_stopped = True
                             stop_reason = "max_total_attempts"
                             break
+                        if (
+                            args.max_download_seconds is not None
+                            and download_seconds_used >= args.max_download_seconds
+                        ):
+                            attempt_record["retry_suppressed_reason"] = "max_download_seconds"
+                            outcome["retry_suppressed_reason"] = "max_download_seconds"
+                            download_time_budget_stopped = True
+                            stop_reason = "max_download_seconds"
+                            break
                         delay = min(args.retry_delay * (2 ** (attempt - 1)), 60.0)
                         attempt_record["retry_delay_seconds"] = delay
                         print(f"  Retry {attempt + 1}/{args.attempts} in {delay:g}s.", flush=True)
@@ -1414,7 +1464,9 @@ def main(argv: list[str] | None = None) -> int:
                 # Resolve the effective batch-stop reason before persisting
                 # reports. Failure cap takes precedence when both limits
                 # are reached after the same file; no more retry was denied.
-                if index < len(downloads) and not attempt_budget_stopped:
+                if index < len(downloads) and not (
+                    attempt_budget_stopped or download_time_budget_stopped
+                ):
                     if args.max_failures is not None and failed >= args.max_failures:
                         stop_reason = "max_failures"
                     elif (
@@ -1423,6 +1475,12 @@ def main(argv: list[str] | None = None) -> int:
                     ):
                         attempt_budget_stopped = True
                         stop_reason = "max_total_attempts"
+                    elif (
+                        args.max_download_seconds is not None
+                        and download_seconds_used >= args.max_download_seconds
+                    ):
+                        download_time_budget_stopped = True
+                        stop_reason = "max_download_seconds"
                 # Run recovery even if a filesystem exception interrupted the
                 # download path after quarantine succeeded.
                 if outcome["status"] == "failed":
