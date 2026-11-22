@@ -134,9 +134,13 @@ def main(argv: list[str] | None = None) -> int:
                         help="Only process this folder and its descendants (repeatable)")
     parser.add_argument("--limit", type=int,
                         help="Process at most N selected files")
+    parser.add_argument("--offset", type=int, default=0,
+                        help="Skip the first N matching entries before applying --limit")
     args = parser.parse_args(argv)
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be a positive integer")
+    if args.offset < 0:
+        parser.error("--offset must be zero or greater")
     try:
         selected_folders = [
             relative_destination(folder, allow_subdirs=True)
@@ -158,8 +162,13 @@ def main(argv: list[str] | None = None) -> int:
                     for folder in selected_folders
                 )
             ]
+        # Preserve stable manifest order across successive batch invocations.
+        # Filtering precedes slicing, so offsets refer to matching entries.
+        total_matching = len(downloads)
         if args.limit is not None:
-            downloads = downloads[:args.limit]
+            downloads = downloads[args.offset:args.offset + args.limit]
+        else:
+            downloads = downloads[args.offset:]
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(f"Invalid manifest: {exc}")
 
@@ -178,8 +187,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"Cookies file does not exist: {cookies}")
 
     if not downloads:
-        print("No downloads selected.")
+        print(f"No downloads selected (matched {total_matching}; offset {args.offset}).")
         return 0
+    print(
+        f"Selected {len(downloads)} of {total_matching} matching entries "
+        f"(offset {args.offset})."
+    )
 
     failed = 0
     failed_entries = {}
