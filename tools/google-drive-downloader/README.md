@@ -164,6 +164,22 @@ path; save old retry manifests elsewhere before reusing that path. Those
 failed entries must be retried separately; resuming from the checkpoint
 moves forward and does not retry them automatically.
 
+Limit how long an individual yt-dlp attempt may run:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --timeout 300 --attempts 3 --retry-delay 2 \
+  --failed-manifest failed.json --status-out status.json
+```
+
+`--timeout` is an optional positive number of seconds. If omitted, there
+is no subprocess timeout. Each timed-out attempt counts toward
+`--attempts` and follows the same exponential retry delay as a nonzero
+downloader exit. Once attempts are exhausted, the file is marked failed
+and appears in both status and retry manifests when enabled. This is a
+**per-attempt** deadline rather than a timeout for the entire batch.
+Timeouts can leave partial downloads on disk, which yt-dlp may resume.
+
 Download files you are authorized to access:
 
 ```bash
