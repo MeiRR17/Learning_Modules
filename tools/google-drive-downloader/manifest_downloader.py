@@ -261,9 +261,11 @@ def main(argv: list[str] | None = None) -> int:
                 }
             except (OSError, ValueError) as exc:
                 parser.error(f"Invalid retained failure manifest: {exc}")
-    failed_targets = {
-        target for _, target, _, _ in entries(failed_entries)
+    failed_records = {
+        target: (file_id, checksum, size)
+        for file_id, target, checksum, size in entries(failed_entries)
     }
+    failed_targets = set(failed_records)
 
     try:
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
@@ -271,11 +273,24 @@ def main(argv: list[str] | None = None) -> int:
         # Protect every declared destination, including unselected batches.
         all_destinations = [entry[1] for entry in downloads]
         if args.only_failed:
-            missing = failed_targets - set(all_destinations)
+            original_records = {
+                target: (file_id, checksum, size)
+                for file_id, target, checksum, size in downloads
+            }
+            missing = failed_targets - set(original_records)
             if missing:
                 parser.error(
                     "Retained failures absent from input manifest: "
                     + ", ".join(sorted(path.as_posix() for path in missing))
+                )
+            changed = [
+                target for target, recorded in failed_records.items()
+                if original_records[target] != recorded
+            ]
+            if changed:
+                parser.error(
+                    "Retained failure metadata differs from input manifest: "
+                    + ", ".join(sorted(path.as_posix() for path in changed))
                 )
         unknown_exclusions = set(excluded_files) - set(all_destinations)
         if unknown_exclusions:
