@@ -165,6 +165,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Write a JSON checkpoint containing the last processed path")
     parser.add_argument("--folder", action="append", default=[],
                         help="Only process this folder and its descendants (repeatable)")
+    parser.add_argument("--file", action="append", default=[],
+                        help="Only process this exact manifest destination (repeatable)")
     parser.add_argument("--exclude-folder", action="append", default=[],
                         help="Skip this folder and its descendants (repeatable)")
     parser.add_argument("--exclude-file", action="append", default=[],
@@ -203,6 +205,10 @@ def main(argv: list[str] | None = None) -> int:
             relative_destination(folder, allow_subdirs=True)
             for folder in args.folder
         ]
+        selected_files = [
+            relative_destination(filename, allow_subdirs=True)
+            for filename in args.file
+        ]
         excluded_folders = [
             relative_destination(folder, allow_subdirs=True)
             for folder in args.exclude_folder
@@ -231,6 +237,9 @@ def main(argv: list[str] | None = None) -> int:
         # that no folder filter was used.
         if checkpoint.get("folders", []) != expected_folders:
             parser.error("Checkpoint folder selection does not match --folder arguments")
+        expected_selected_files = sorted(path.as_posix() for path in selected_files)
+        if checkpoint.get("selected_files", []) != expected_selected_files:
+            parser.error("Checkpoint file selection does not match --file arguments")
         expected_exclusions = sorted(folder.as_posix() for folder in excluded_folders)
         if checkpoint.get("excluded_folders", []) != expected_exclusions:
             parser.error("Checkpoint exclusion selection does not match --exclude-folder arguments")
@@ -300,6 +309,12 @@ def main(argv: list[str] | None = None) -> int:
                     "Retained failure metadata differs from input manifest: "
                     + ", ".join(sorted(path.as_posix() for path in changed))
                 )
+        unknown_selections = set(selected_files) - set(all_destinations)
+        if unknown_selections:
+            parser.error(
+                "--file destination not found: "
+                + ", ".join(sorted(path.as_posix() for path in unknown_selections))
+            )
         unknown_exclusions = set(excluded_files) - set(all_destinations)
         if unknown_exclusions:
             parser.error(
@@ -313,6 +328,11 @@ def main(argv: list[str] | None = None) -> int:
                     entry[1].parent == folder or folder in entry[1].parents
                     for folder in selected_folders
                 )
+            ]
+        if selected_files:
+            selected_targets = set(selected_files)
+            downloads = [
+                entry for entry in downloads if entry[1] in selected_targets
             ]
         if excluded_folders:
             downloads = [
@@ -433,6 +453,7 @@ def main(argv: list[str] | None = None) -> int:
                         "schema_version": 1,
                         "manifest_sha256": sha256_file(args.manifest),
                         "folders": sorted(folder.as_posix() for folder in selected_folders),
+                        "selected_files": sorted(path.as_posix() for path in selected_files),
                         "excluded_folders": sorted(folder.as_posix() for folder in excluded_folders),
                         "excluded_files": sorted(path.as_posix() for path in excluded_files),
                         "after": (
@@ -494,6 +515,7 @@ def main(argv: list[str] | None = None) -> int:
             "schema_version": 1,
             "manifest_sha256": checkpoint_hash,
             "folders": sorted(folder.as_posix() for folder in selected_folders),
+            "selected_files": sorted(path.as_posix() for path in selected_files),
             "excluded_folders": sorted(folder.as_posix() for folder in excluded_folders),
             "excluded_files": sorted(path.as_posix() for path in excluded_files),
             "after": outcomes[-1]["path"],
