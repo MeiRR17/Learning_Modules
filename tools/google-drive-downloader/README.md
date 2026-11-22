@@ -237,11 +237,15 @@ When `--plan-inspect-local` is enabled, each entry whose
 `planned_action` is `blocked` includes a `blocked_reason`. The
 summary's `blocked_reasons` object counts files by reason. Reason codes
 are `unsafe_destination`, `unsafe_partial`, `local_read_error`,
-`file_size_limit`, `missing_for_verification`,
-`invalid_for_verification`, `existing_file_mismatch`, and
-`unavailable` (fallback). The optional `error` field gives further
-filesystem detail for `local_read_error`. These reason codes describe
-local preflight conditions, not remote access failures.
+`file_size_limit`, `missing_for_verification`, `empty_file`,
+`size_mismatch`, `checksum_mismatch`, and `unavailable` (fallback).
+An `invalid` local file now reports the specific available integrity
+issue instead of a generic verification or mismatch reason. The
+`integrity_issue` field is also available on an invalid file whose
+`planned_action` is `quarantine_and_download`; those files are not counted
+as blocked. The optional `error` field gives further filesystem detail
+for `local_read_error`. These reason codes describe local preflight
+conditions, not remote access failures.
 
 Read preflight policy results directly from the exported JSON plan:
 
