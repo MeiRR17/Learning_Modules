@@ -97,12 +97,19 @@ By default, a nonempty existing file whose declared `size` or `sha256`
 does not match is left untouched and reported as failed. With
 `--quarantine-invalid`, that file is renamed to a sibling backup with an
 `.invalid-<random-id>` suffix before the downloader attempts a replacement.
-The backup is kept even if the new download fails. The option only applies
-to ordinary download mode, not `--verify-only` or `--dry-run`. Files
+The backup is kept even if the new download fails. If a matching
+`.part` file exists, it is also preserved with a unique
+`.invalid-<random-id>` suffix so yt-dlp cannot resume from stale partial
+content. Both backups are left in the download directory. A symlinked or
+non-regular partial file blocks quarantine before moving the original;
+filesystem errors while moving backups are reported as per-file failures.
+The option only applies to ordinary download mode, not `--verify-only`
+or `--dry-run`. Files
 rejected solely because of `--max-file-size` are **not** quarantined.
 Quarantined backups require manual review and cleanup; this mode never
 automatically deletes them. Add `--status-out status.json` to record the
-relative `quarantined_backup` path for each affected file. The report also
+relative `quarantined_backup` path for each affected file and
+`quarantined_partial_backup` when an existing `.part` was also moved. The report also
 includes `quarantined` (the number of files moved aside) and `recovered`
 (the number subsequently replaced successfully). A quarantined file whose
 replacement fails retains `status: "failed"` and its error reason, while
