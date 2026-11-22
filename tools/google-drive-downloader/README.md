@@ -21,6 +21,24 @@ mismatched sizes or checksums are **not overwritten**. New downloads are also
 checked against any supplied expectations. Size alone can detect truncation,
 but does not prove file integrity.
 
+Limit the combined declared size of a selected batch:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --limit 20 --max-batch-size 10737418240 \
+  --failed-manifest failed.json
+```
+
+`--max-batch-size` accepts a positive byte count; the example caps the
+selected batch at 10 GiB of **declared** file sizes. Each selected entry
+must supply a `size` in the manifest. The command rejects missing sizes
+or a total above the cap before writing reports or downloading any files.
+Folder and file filters, exclusions, cursor positioning, and `--limit`
+are applied first. This is a selection-policy limit, not a strict measure
+of network transfer or actual disk growth; existing files may be skipped,
+and temporary download data may consume extra space. Use
+`--min-free-space` separately to preserve disk capacity.
+
 Reject oversized files during downloads and local verification:
 
 ```bash
