@@ -696,7 +696,14 @@ Skipped or already verified files do not consume the budget. A
 The `attempt_budget_exhausted` flag is true only when the limit
 prevents another retry or leaves selected files unprocessed. Simply
 using the last permitted attempt to finish the final selected file
-does not count as an interrupted batch. The `--cursor-out` checkpoint
+does not count as an interrupted batch. The status report also includes
+`unprocessed` and a `stop_reason` field: `max_failures` when the
+per-batch failed-file threshold stops processing, `max_total_attempts`
+when the subprocess budget stops processing, or `null` when neither
+limit stops the batch. The checkpoint also records `stop_reason`.
+If both limits are reached after the same file, the failed-file
+threshold takes precedence unless the attempt budget actually prevented
+a retry. The `--cursor-out` checkpoint
 also stores `download_attempts`, `max_total_attempts`, and
 `attempt_budget_exhausted` for auditing a stopped batch. Incomplete
 batches caused by the limit exit nonzero. The checkpoint still advances
