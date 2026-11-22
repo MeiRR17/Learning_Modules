@@ -181,6 +181,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="In dry-run, exit nonzero if the inspected plan contains blocked files")
     parser.add_argument("--fail-on-unknown-size-plan", action="store_true",
                         help="In dry-run, exit nonzero if actionable files have unknown transfer sizes")
+    parser.add_argument("--max-estimated-transfer", type=int, metavar="BYTES",
+                        help="In dry-run, reject inspected plans exceeding this remaining-byte budget")
     parser.add_argument("--cursor-out", type=Path,
                         help="Write a JSON checkpoint containing the last processed path")
     parser.add_argument("--folder", action="append", default=[],
@@ -209,6 +211,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--fail-on-blocked-plan requires --plan-inspect-local and --dry-run")
     if args.fail_on_unknown_size_plan and not (args.plan_inspect_local and args.dry_run):
         parser.error("--fail-on-unknown-size-plan requires --plan-inspect-local and --dry-run")
+    if args.max_estimated_transfer is not None:
+        if args.max_estimated_transfer < 0:
+            parser.error("--max-estimated-transfer must be zero or greater")
+        if not (args.plan_inspect_local and args.dry_run):
+            parser.error("--max-estimated-transfer requires --plan-inspect-local and --dry-run")
     if args.only_failed and not args.retain_failures:
         parser.error("--only-failed requires --retain-failures")
     if args.only_failed and (args.after is not None or args.cursor_in or args.offset or args.cursor_out):
@@ -651,6 +658,24 @@ def main(argv: list[str] | None = None) -> int:
                 print(
                     f"Preflight blocked: {unknown} actionable file(s) have "
                     "unknown remaining transfer sizes.",
+                    file=sys.stderr,
+                )
+                preflight_failed = True
+        if args.max_estimated_transfer is not None:
+            inspection = plan["local_inspection"]
+            unknown = inspection["unknown_estimate_count"]
+            estimate = inspection["estimated_remaining_bytes_known"]
+            if unknown:
+                print(
+                    f"Preflight blocked: cannot enforce transfer budget with "
+                    f"{unknown} unknown remaining-size estimate(s).",
+                    file=sys.stderr,
+                )
+                preflight_failed = True
+            if estimate > args.max_estimated_transfer:
+                print(
+                    f"Preflight blocked: estimated remaining transfer {estimate} bytes "
+                    f"exceeds --max-estimated-transfer {args.max_estimated_transfer}.",
                     file=sys.stderr,
                 )
                 preflight_failed = True
