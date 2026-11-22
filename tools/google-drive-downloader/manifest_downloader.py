@@ -26,6 +26,11 @@ from pathlib import Path, PurePosixPath
 from typing import Iterator
 
 DRIVE_ID = re.compile(r"^[A-Za-z0-9_-]{10,256}$")
+WINDOWS_RESERVED = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+}
 
 
 def relative_destination(value: str, *, allow_subdirs: bool) -> Path:
@@ -39,8 +44,13 @@ def relative_destination(value: str, *, allow_subdirs: bool) -> Path:
         part in ("", ".", "..") for part in value.split("/")
     ):
         raise ValueError(f"Unsafe relative path: {value!r}")
-    if any(":" in part or part.endswith((" ", ".")) for part in parts):
-        raise ValueError(f"Nonportable destination: {value!r}")
+    if any(
+        part.endswith((" ", "."))
+        or any(ord(char) < 32 or char in '<>"|?*' for char in part)
+        or part.split(".", 1)[0].upper() in WINDOWS_RESERVED
+        for part in parts
+    ):
+        raise ValueError(f"Nonportable or reserved destination: {value!r}")
     if not allow_subdirs and len(parts) != 1:
         raise ValueError("File names cannot contain subdirectories")
     return Path(*parts)
@@ -260,7 +270,10 @@ def main(argv: list[str] | None = None) -> int:
         ]:
             parser.error("Retry and status reports cannot overwrite the input checkpoint")
 
-    root = args.output.expanduser().resolve()
+    output_path = args.output.expanduser()
+    if output_path.is_symlink():
+        parser.error("--output must not be a symlink")
+    root = output_path.resolve()
     # Refuse any collision between a generated file and sensitive inputs or
     # reports before initializing the retry manifest or invoking yt-dlp.
     declared_paths = {(root / relative).resolve() for relative in all_destinations}
