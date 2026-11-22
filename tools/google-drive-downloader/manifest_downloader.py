@@ -445,9 +445,10 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("Reports cannot overwrite the input checkpoint")
         if args.cursor_in and args.cursor_in.expanduser().resolve() in [
             path.expanduser().resolve()
-            for path in (args.failed_manifest, args.status_out) if path is not None
+            for path in (args.failed_manifest, args.status_out, args.plan_out)
+            if path is not None and (path == args.plan_out or not args.dry_run)
         ]:
-            parser.error("Retry and status reports cannot overwrite the input checkpoint")
+            parser.error("Retry, status, and plan reports cannot overwrite the input checkpoint")
 
     output_path = args.output.expanduser()
     if output_path.is_symlink():
