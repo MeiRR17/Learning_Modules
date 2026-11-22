@@ -637,49 +637,61 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 "unknown_estimate_count": sum(value is None for value in estimates),
             }
+        # Persist preflight decisions in the plan itself, including rejected
+        # batches. Callers can inspect stable reason codes instead of
+        # depending on stderr wording or exit status alone.
+        checks = []
+        if args.plan_inspect_local:
+            inspection = plan["local_inspection"]
+            blocked = inspection["blocked_or_invalid"]
+            unknown = inspection["unknown_estimate_count"]
+            estimate = inspection["estimated_remaining_bytes_known"]
+            if args.fail_on_blocked_plan:
+                checks.append({
+                    "code": "blocked_files",
+                    "passed": blocked == 0,
+                    "observed": blocked,
+                    "limit": 0,
+                })
+            if args.fail_on_unknown_size_plan:
+                checks.append({
+                    "code": "unknown_transfer_size",
+                    "passed": unknown == 0,
+                    "observed": unknown,
+                    "limit": 0,
+                })
+            if args.max_estimated_transfer is not None:
+                checks.append({
+                    "code": "transfer_size_known",
+                    "passed": unknown == 0,
+                    "observed": unknown,
+                    "limit": 0,
+                })
+                checks.append({
+                    "code": "estimated_transfer_budget",
+                    "passed": estimate <= args.max_estimated_transfer,
+                    "observed": estimate,
+                    "limit": args.max_estimated_transfer,
+                })
+        plan["preflight"] = {
+            "passed": all(check["passed"] for check in checks),
+            "checks": checks,
+            "failed_codes": [check["code"] for check in checks if not check["passed"]],
+        }
         try:
             write_retry_manifest(args.plan_out.expanduser(), plan)
         except (OSError, ValueError) as exc:
             print(f"Failed to write batch plan: {exc}", file=sys.stderr)
             return 1
         print(f"Batch plan written: {args.plan_out}")
-        preflight_failed = False
-        if args.fail_on_blocked_plan:
-            blocked = plan["local_inspection"]["blocked_or_invalid"]
-            if blocked:
-                print(
-                    f"Preflight blocked: {blocked} selected file(s) cannot proceed.",
-                    file=sys.stderr,
-                )
-                preflight_failed = True
-        if args.fail_on_unknown_size_plan:
-            unknown = plan["local_inspection"]["unknown_estimate_count"]
-            if unknown:
-                print(
-                    f"Preflight blocked: {unknown} actionable file(s) have "
-                    "unknown remaining transfer sizes.",
-                    file=sys.stderr,
-                )
-                preflight_failed = True
-        if args.max_estimated_transfer is not None:
-            inspection = plan["local_inspection"]
-            unknown = inspection["unknown_estimate_count"]
-            estimate = inspection["estimated_remaining_bytes_known"]
-            if unknown:
-                print(
-                    f"Preflight blocked: cannot enforce transfer budget with "
-                    f"{unknown} unknown remaining-size estimate(s).",
-                    file=sys.stderr,
-                )
-                preflight_failed = True
-            if estimate > args.max_estimated_transfer:
-                print(
-                    f"Preflight blocked: estimated remaining transfer {estimate} bytes "
-                    f"exceeds --max-estimated-transfer {args.max_estimated_transfer}.",
-                    file=sys.stderr,
-                )
-                preflight_failed = True
-        if preflight_failed:
+        if not plan["preflight"]["passed"]:
+            for check in checks:
+                if not check["passed"]:
+                    print(
+                        f"Preflight blocked: {check['code']} "
+                        f"(observed={check['observed']}, limit={check['limit']}).",
+                        file=sys.stderr,
+                    )
             return 1
     cookies = args.cookies.expanduser().resolve() if args.cookies else None
     if cookies and not args.verify_only and not args.dry_run and not cookies.is_file():
