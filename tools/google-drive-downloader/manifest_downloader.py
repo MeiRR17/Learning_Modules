@@ -955,6 +955,10 @@ def main(argv: list[str] | None = None) -> int:
                 item.get("status") == "downloaded" and "quarantined_backup" in item
                 for item in outcomes
             ),
+            "download_attempts": sum(item.get("download_attempts", 0) for item in outcomes),
+            "download_elapsed_seconds": round(
+                sum(item.get("download_elapsed_seconds", 0) for item in outcomes), 3
+            ),
             "files": outcomes,
         }
         write_retry_manifest(args.status_out.expanduser(), report)
@@ -1217,6 +1221,8 @@ def main(argv: list[str] | None = None) -> int:
                     command.extend(["--max-filesize", str(args.max_file_size)])
                 command.append(f"https://drive.google.com/file/d/{file_id}/view")
                 failure = None
+                outcome["download_attempts"] = 0
+                outcome["download_elapsed_seconds"] = 0.0
                 for attempt in range(1, args.attempts + 1):
                     # A failed attempt may have left a larger partial file.
                     # Reject that state even if the free-space reserve is off.
@@ -1257,6 +1263,8 @@ def main(argv: list[str] | None = None) -> int:
                             )
                             break
                     result = None
+                    attempt_started = time.monotonic()
+                    outcome["download_attempts"] += 1
                     try:
                         result = subprocess.run(
                             command, check=False, timeout=args.timeout,
@@ -1266,7 +1274,13 @@ def main(argv: list[str] | None = None) -> int:
                     except OSError as exc:
                         failure = f"Could not launch downloader: {exc}"
                         break
+                    finally:
+                        outcome["download_elapsed_seconds"] = round(
+                            outcome["download_elapsed_seconds"]
+                            + time.monotonic() - attempt_started, 3
+                        )
                     if result is not None:
+                        outcome["last_downloader_exit_code"] = result.returncode
                         if result.returncode == 0:
                             if not destination.is_file() or destination.stat().st_size == 0:
                                 failure = "Downloader succeeded but output file is missing or empty."
