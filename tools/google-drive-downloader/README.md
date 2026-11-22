@@ -675,8 +675,17 @@ file that reaches the yt-dlp download loop, `download_attempts` counts
 subprocess invocations (including timed-out or failed launches),
 `download_elapsed_seconds` records their cumulative wall-clock time
 rounded to milliseconds, and `last_downloader_exit_code` records the
-most recent completed yt-dlp process exit code, when available. The
-report's top-level `download_attempts` and
+most recent completed yt-dlp process exit code, when available. Each attempted subprocess also receives an `attempt_history` record
+containing its 1-based `attempt` number, `elapsed_seconds`, the
+`outcome` classification, and `exit_code` when yt-dlp returned one.
+The stable outcome values are `completed` (process succeeded and the
+download passed verification), `verification_failed` (process exited
+successfully but output checks failed), `nonzero_exit`, `timeout`,
+and `launch_failed`. The top-level `attempt_outcomes` object counts
+each classification across all processed files. These records do not
+contain Drive IDs, cookies, or full subprocess output.
+
+The report's top-level `download_attempts` and
 `download_elapsed_seconds` summarize these fields across processed
 files. Backoff delays, hashing, and other filesystem operations are
 not included in the elapsed figure. Files skipped or rejected before
