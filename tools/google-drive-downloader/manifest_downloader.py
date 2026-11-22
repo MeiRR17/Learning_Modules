@@ -358,6 +358,31 @@ def main(argv: list[str] | None = None) -> int:
         }
         write_retry_manifest(args.status_out.expanduser(), report)
 
+    checkpoint_hash = None
+    if args.cursor_out and not args.dry_run:
+        try:
+            checkpoint_hash = sha256_file(args.manifest)
+        except OSError as exc:
+            parser.error(f"Cannot read manifest for checkpoint: {exc}")
+
+    def publish_checkpoint() -> None:
+        if not args.cursor_out or args.dry_run or not outcomes:
+            return
+        # A pending item was interrupted; do not skip it on resumption.
+        if outcomes[-1]["status"] == "pending":
+            return
+        checkpoint = {
+            "schema_version": 1,
+            "manifest_sha256": checkpoint_hash,
+            "folders": sorted(folder.as_posix() for folder in selected_folders),
+            "after": outcomes[-1]["path"],
+            "processed": len(outcomes),
+            "failed": failed,
+            "matching_entries": total_matching,
+            "has_more": start + len(outcomes) < total_matching,
+        }
+        write_retry_manifest(args.cursor_out.expanduser(), checkpoint)
+
     for index, (file_id, relative, checksum, size) in enumerate(downloads, start=1):
         # Check before selecting the next file: all previous outcomes have
         # already been atomically journaled by the per-file finally block.
@@ -462,12 +487,15 @@ def main(argv: list[str] | None = None) -> int:
                 fail(failure)
             else:
                 outcome["status"] = "downloaded"
+        except OSError as exc:
+            fail(f"File operation failed: {exc}")
         finally:
-            # Persist the retry list before the less-critical status summary.
-            # A process interrupted later can still retry all known failures.
+            # Persist failure information before advancing the cursor.
+            # A pending entry must never be marked complete.
             if args.failed_manifest and not args.dry_run:
                 write_retry_manifest(args.failed_manifest.expanduser(), failed_entries)
             publish_status()
+            publish_checkpoint()
 
     if args.status_out and not args.dry_run:
         print(f"Status report written: {args.status_out}")
@@ -476,21 +504,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Retry manifest written: {args.failed_manifest}")
 
     if args.cursor_out and not args.dry_run:
-        checkpoint = {
-            "schema_version": 1,
-            "manifest_sha256": sha256_file(args.manifest),
-            "folders": sorted(folder.as_posix() for folder in selected_folders),
-            "after": outcomes[-1]["path"],
-            "processed": len(outcomes),
-            "failed": failed,
-            "matching_entries": total_matching,
-            "has_more": start + len(outcomes) < total_matching,
-        }
-        try:
-            write_retry_manifest(args.cursor_out.expanduser(), checkpoint)
-        except (OSError, ValueError) as exc:
-            print(f"Failed to write batch checkpoint: {exc}", file=sys.stderr)
-            return 1
         print(f"Batch checkpoint written: {args.cursor_out}")
 
     processed = len(outcomes)
