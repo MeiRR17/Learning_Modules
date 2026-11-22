@@ -346,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
             # Do not leave reports from an earlier batch looking current.
             # Keep a usable last-file cursor when the batch is exhausted.
             try:
-                if args.failed_manifest:
+                if args.failed_manifest and not args.retain_failures:
                     write_retry_manifest(args.failed_manifest.expanduser(), {})
                 if args.status_out:
                     write_retry_manifest(args.status_out.expanduser(), {
@@ -448,17 +448,6 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Stopping batch after {failed} failed files.", file=sys.stderr)
                 break
             destination = root / relative
-            # Reprocessing replaces any previously unresolved result for this
-            # exact target instead of accumulating duplicate retry entries.
-            if args.retain_failures:
-                folder_key = relative.parent.as_posix()
-                if folder_key in failed_entries:
-                    failed_entries[folder_key] = [
-                        item for item in failed_entries[folder_key]
-                        if item["name"] != relative.name
-                    ]
-                    if not failed_entries[folder_key]:
-                        del failed_entries[folder_key]
             outcome = {"path": relative.as_posix(), "status": "pending"}
             outcomes.append(outcome)
             print(f"[{index}/{len(downloads)}] {relative}", flush=True)
@@ -559,6 +548,20 @@ def main(argv: list[str] | None = None) -> int:
             except OSError as exc:
                 fail(f"File operation failed: {exc}")
             finally:
+                # Only reconcile retained failures once this entry has a
+                # definitive outcome. An interrupted pending entry must keep
+                # its earlier retry record.
+                if args.retain_failures and outcome["status"] != "pending":
+                    folder_key = relative.parent.as_posix()
+                    existing = failed_entries.get(folder_key, [])
+                    matching = [item for item in existing if item["name"] == relative.name]
+                    retained = [item for item in existing if item["name"] != relative.name]
+                    if outcome["status"] == "failed" and matching:
+                        retained.append(matching[-1])
+                    if retained:
+                        failed_entries[folder_key] = retained
+                    else:
+                        failed_entries.pop(folder_key, None)
                 # Persist failure information before advancing the cursor.
                 # A pending entry must never be marked complete.
                 if args.failed_manifest and not args.dry_run:
