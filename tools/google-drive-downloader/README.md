@@ -21,6 +21,24 @@ mismatched sizes or checksums are **not overwritten**. New downloads are also
 checked against any supplied expectations. Size alone can detect truncation,
 but does not prove file integrity.
 
+Reject oversized files during downloads and local verification:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --max-file-size 5368709120 --failed-manifest failed.json
+```
+
+`--max-file-size` accepts a positive byte count; the example sets a 5 GiB
+per-file limit. Manifest entries declaring a larger `size` fail before a
+transfer begins. The downloader also passes the limit to yt-dlp as
+`--max-filesize` to reject oversized transfers when their size is known
+to the server, and checks completed files against the limit. In
+`--verify-only` mode, existing files above the limit are reported as
+failures. Oversized existing or downloaded files are **not deleted**;
+the failure manifest can be used to review them. If the remote size is
+unknown, the server-side preflight cannot guarantee that the transfer
+will stop before crossing the limit.
+
 Limit the transfer rate to reduce network load during large batches:
 
 ```bash
