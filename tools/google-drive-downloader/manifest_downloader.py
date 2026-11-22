@@ -1037,13 +1037,39 @@ def main(argv: list[str] | None = None) -> int:
                     ):
                         fail("Quarantine destination already exists.")
                         continue
-                    if part_path.is_file():
-                        part_path.rename(part_backup)
+                    # Treat the pair as one operation as far as possible:
+                    # restore the partial file if moving the original fails.
+                    # Never claim the original was quarantined before rename
+                    # has succeeded.
+                    part_moved = False
+                    try:
+                        if part_path.is_file():
+                            part_path.rename(part_backup)
+                            part_moved = True
+                        destination.rename(backup)
+                    except OSError as exc:
+                        rollback_error = None
+                        if part_moved:
+                            try:
+                                part_backup.rename(part_path)
+                            except OSError as rollback_exc:
+                                rollback_error = rollback_exc
+                                outcome["quarantined_partial_backup"] = (
+                                    part_backup.relative_to(root).as_posix()
+                                )
+                        if rollback_error is not None:
+                            fail(
+                                "Could not quarantine original file "
+                                f"({exc}); could not restore partial ({rollback_error})."
+                            )
+                        else:
+                            fail(f"Could not quarantine original file: {exc}")
+                        continue
+                    if part_moved:
                         outcome["quarantined_partial_backup"] = (
                             part_backup.relative_to(root).as_posix()
                         )
                         print(f"  Partial download quarantined: {part_backup}", flush=True)
-                    destination.rename(backup)
                     outcome["quarantined_backup"] = backup.relative_to(root).as_posix()
                     print(f"  Invalid file quarantined: {backup}", flush=True)
                 if destination.exists() and not destination.is_file():
