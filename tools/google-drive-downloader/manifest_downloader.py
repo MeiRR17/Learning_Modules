@@ -476,43 +476,81 @@ def main(argv: list[str] | None = None) -> int:
         def inspect_local(relative: Path, checksum: str | None, size: int | None) -> dict:
             destination = root / relative
             if not destination_is_safe(destination, root):
-                return {"local_state": "unsafe", "estimated_remaining_bytes": None}
-            part_path = destination.with_name(destination.name + ".part")
-            if part_path.is_symlink() or (part_path.exists() and not part_path.is_file()):
-                return {"local_state": "unsafe_partial", "estimated_remaining_bytes": None}
+                return {
+                    "local_state": "unsafe", "planned_action": "blocked",
+                    "estimated_remaining_bytes": None,
+                }
             try:
+                if size is not None and args.max_file_size is not None and size > args.max_file_size:
+                    return {
+                        "local_state": "oversized", "planned_action": "blocked",
+                        "estimated_remaining_bytes": None,
+                    }
                 if destination.is_file():
                     local_bytes = destination.stat().st_size
-                    if local_bytes <= 0 or (size is not None and local_bytes != size):
+                    if args.max_file_size is not None and local_bytes > args.max_file_size:
                         return {
-                            "local_state": "invalid", "local_bytes": local_bytes,
-                            "estimated_remaining_bytes": size,
+                            "local_state": "oversized", "planned_action": "blocked",
+                            "local_bytes": local_bytes, "estimated_remaining_bytes": None,
                         }
-                    if checksum is not None and sha256_file(destination) != checksum:
+                    if local_bytes > 0 and (size is None or local_bytes == size) and (
+                        checksum is None or sha256_file(destination) == checksum
+                    ):
                         return {
-                            "local_state": "invalid", "local_bytes": local_bytes,
-                            "estimated_remaining_bytes": size,
+                            "local_state": "matching", "planned_action": "skip",
+                            "local_bytes": local_bytes, "estimated_remaining_bytes": 0,
+                            "integrity_verified": checksum is not None,
                         }
+                    # A zero-byte destination can be downloaded in-place;
+                    # nonempty mismatches require explicit quarantine.
+                    if local_bytes > 0 and not args.quarantine_invalid:
+                        return {
+                            "local_state": "invalid", "planned_action": "blocked",
+                            "local_bytes": local_bytes, "estimated_remaining_bytes": None,
+                        }
+                    if local_bytes > 0:
+                        action = "quarantine_and_download"
+                        state = "invalid"
+                    else:
+                        action = "download"
+                        state = "empty"
+                elif destination.exists():
                     return {
-                        "local_state": "matching", "local_bytes": local_bytes,
-                        "estimated_remaining_bytes": 0,
-                        "integrity_verified": checksum is not None,
+                        "local_state": "unsafe", "planned_action": "blocked",
+                        "estimated_remaining_bytes": None,
                     }
-                if destination.exists():
-                    return {"local_state": "unsafe", "estimated_remaining_bytes": None}
+                else:
+                    action = "download"
+                    state = "missing"
+                part_path = destination.with_name(destination.name + ".part")
+                if part_path.is_symlink() or (part_path.exists() and not part_path.is_file()):
+                    return {
+                        "local_state": "unsafe_partial", "planned_action": "blocked",
+                        "estimated_remaining_bytes": None,
+                    }
+                part_bytes = part_path.stat().st_size if part_path.is_file() else 0
+                # When quarantining, even a partial file must be moved aside
+                # and the replacement starts from scratch.
+                if action == "quarantine_and_download":
+                    estimate = size
+                else:
+                    estimate = max(size - part_bytes, 0) if size is not None else None
+                    if part_path.is_file():
+                        action = "resume"
+                        state = "partial"
+                result = {
+                    "local_state": state, "planned_action": action,
+                    "estimated_remaining_bytes": estimate,
+                }
                 if part_path.is_file():
-                    part_bytes = part_path.stat().st_size
-                    return {
-                        "local_state": "partial", "partial_bytes": part_bytes,
-                        "estimated_remaining_bytes": max(size - part_bytes, 0)
-                        if size is not None else None,
-                    }
-                return {"local_state": "missing", "estimated_remaining_bytes": size}
+                    result["partial_bytes"] = part_bytes
+                if destination.is_file():
+                    result["local_bytes"] = destination.stat().st_size
+                return result
             except OSError as exc:
                 return {
-                    "local_state": "unreadable",
-                    "error": str(exc),
-                    "estimated_remaining_bytes": None,
+                    "local_state": "unreadable", "planned_action": "blocked",
+                    "error": str(exc), "estimated_remaining_bytes": None,
                 }
 
         planned_files = [
@@ -534,13 +572,20 @@ def main(argv: list[str] | None = None) -> int:
             "files": planned_files,
         }
         if args.plan_inspect_local:
-            estimates = [item["estimated_remaining_bytes"] for item in planned_files]
+            estimates = [
+                item["estimated_remaining_bytes"] for item in planned_files
+                if item["planned_action"] != "blocked"
+            ]
+            actions = {
+                action: sum(item["planned_action"] == action for item in planned_files)
+                for action in ("skip", "download", "resume", "quarantine_and_download", "blocked")
+            }
             plan["local_inspection"] = {
+                "actions": actions,
                 "matching": sum(item["local_state"] == "matching" for item in planned_files),
                 "partial": sum(item["local_state"] == "partial" for item in planned_files),
                 "blocked_or_invalid": sum(
-                    item["local_state"] in ("invalid", "unsafe", "unsafe_partial", "unreadable")
-                    for item in planned_files
+                    item["planned_action"] == "blocked" for item in planned_files
                 ),
                 "estimated_remaining_bytes_known": sum(
                     value for value in estimates if value is not None
