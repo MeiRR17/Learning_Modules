@@ -15,9 +15,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path, PurePosixPath
 from typing import Iterator
@@ -58,6 +60,31 @@ def destination_is_safe(path: Path, root: Path) -> bool:
             return False
         cursor = cursor.parent
     return not root.is_symlink()
+
+
+def write_retry_manifest(path: Path, manifest: dict[str, list[dict[str, str]]]) -> None:
+    """Atomically publish retry entries without exposing a partial JSON report."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink():
+        raise ValueError("Failed-manifest path must not be a symlink")
+
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False
+        ) as stream:
+            temporary = Path(stream.name)
+            json.dump(manifest, stream, indent=2, ensure_ascii=False)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        if path.is_symlink():
+            raise ValueError("Failed-manifest path became a symlink")
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def entries(manifest: object) -> Iterator[tuple[str, Path, str | None]]:
@@ -105,6 +132,15 @@ def main(argv: list[str] | None = None) -> int:
         downloads = list(entries(manifest))  # Validate everything before writing.
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(f"Invalid manifest: {exc}")
+
+    # Compare resolved paths before downloading: the retry output must never
+    # replace the user's original manifest (including through symlink aliases).
+    if args.failed_manifest and not args.dry_run:
+        report = args.failed_manifest.expanduser().resolve()
+        if report == args.manifest.expanduser().resolve():
+            parser.error("--failed-manifest must differ from the input manifest")
+        if args.failed_manifest.expanduser().is_symlink():
+            parser.error("--failed-manifest must not be a symlink")
 
     root = args.output.expanduser().resolve()
     cookies = args.cookies.expanduser().resolve() if args.cookies else None
@@ -179,13 +215,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.failed_manifest and not args.dry_run:
         report = args.failed_manifest.expanduser()
-        if report.is_symlink():
-            parser.error("Failed-manifest path must not be a symlink")
-        report.parent.mkdir(parents=True, exist_ok=True)
-        report.write_text(
-            json.dumps(failed_entries, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
+        try:
+            write_retry_manifest(report, failed_entries)
+        except (OSError, ValueError) as exc:
+            print(f"Failed to write retry manifest: {exc}", file=sys.stderr)
+            return 1
         print(f"Retry manifest written: {report}")
 
     print(f"Completed: {len(downloads) - failed}/{len(downloads)} entries successful or skipped.")
