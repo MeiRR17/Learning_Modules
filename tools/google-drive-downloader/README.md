@@ -140,6 +140,12 @@ produced in dry-run mode. If interrupted, the report preserves outcomes written
 so far, but does not itself resume the batch. Use `--cursor-in` for completed
 batch checkpoints or rerun the original manifest to skip eligible files.
 Report files cannot overwrite the manifest, cookies, or input checkpoint.
+Before downloading or generating reports, the tool also rejects collisions
+between any declared download destination and the input manifest, cookie
+file, input checkpoint, or report paths. This check uses the complete
+manifest, even when `--folder`, `--offset`, `--after`, or `--limit` selects
+only part of it. Keep report files outside the download destination tree
+when names could overlap with files in the manifest.
 
 Stop a large batch when repeated failures suggest unavailable files or
 network trouble:
