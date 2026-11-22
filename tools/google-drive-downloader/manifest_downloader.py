@@ -155,6 +155,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--failed-manifest", type=Path)
     parser.add_argument("--retain-failures", action="store_true",
                         help="Carry forward unresolved entries from an existing failed manifest")
+    parser.add_argument("--only-failed", action="store_true",
+                        help="Process only unresolved entries recorded in --failed-manifest")
     parser.add_argument("--status-out", type=Path,
                         help="Write a JSON report of individual file outcomes")
     parser.add_argument("--cursor-out", type=Path,
@@ -177,6 +179,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.retain_failures and not args.failed_manifest:
         parser.error("--retain-failures requires --failed-manifest")
+    if args.only_failed and not args.retain_failures:
+        parser.error("--only-failed requires --retain-failures")
+    if args.only_failed and (args.after is not None or args.cursor_in or args.offset or args.cursor_out):
+        parser.error("--only-failed cannot be combined with cursor or offset options")
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be a positive integer")
     if args.max_failures is not None and args.max_failures < 1:
@@ -240,11 +246,37 @@ def main(argv: list[str] | None = None) -> int:
     if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
         parser.error("--timeout must be a finite number greater than zero")
 
+    failed_entries = {}
+    if args.retain_failures and args.failed_manifest:
+        retry_path = args.failed_manifest.expanduser()
+        if args.only_failed and not retry_path.is_file():
+            parser.error("--only-failed requires an existing --failed-manifest")
+        if retry_path.exists():
+            try:
+                previous = json.loads(retry_path.read_text(encoding="utf-8"))
+                list(entries(previous))
+                failed_entries = {
+                    folder: [dict(item) for item in items]
+                    for folder, items in previous.items()
+                }
+            except (OSError, ValueError) as exc:
+                parser.error(f"Invalid retained failure manifest: {exc}")
+    failed_targets = {
+        target for _, target, _, _ in entries(failed_entries)
+    }
+
     try:
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
         downloads = list(entries(manifest))  # Validate everything before writing.
         # Protect every declared destination, including unselected batches.
         all_destinations = [entry[1] for entry in downloads]
+        if args.only_failed:
+            missing = failed_targets - set(all_destinations)
+            if missing:
+                parser.error(
+                    "Retained failures absent from input manifest: "
+                    + ", ".join(sorted(path.as_posix() for path in missing))
+                )
         unknown_exclusions = set(excluded_files) - set(all_destinations)
         if unknown_exclusions:
             parser.error(
@@ -272,6 +304,8 @@ def main(argv: list[str] | None = None) -> int:
             downloads = [
                 entry for entry in downloads if entry[1] not in excluded_targets
             ]
+        if args.only_failed:
+            downloads = [entry for entry in downloads if entry[1] in failed_targets]
         # Preserve stable manifest order across successive batch invocations.
         # Inclusion and exclusion precede slicing, so cursors and offsets
         # refer only to entries that satisfy both selection rules.
@@ -341,20 +375,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"Cookies file does not exist: {cookies}")
 
     failed = 0
-    failed_entries = {}
     outcomes = []
-    if args.retain_failures and args.failed_manifest and args.failed_manifest.expanduser().exists():
-        try:
-            previous = json.loads(args.failed_manifest.expanduser().read_text(encoding="utf-8"))
-            # Validate retained entries before any report is replaced.
-            list(entries(previous))
-            failed_entries = {
-                folder: [dict(item) for item in items]
-                for folder, items in previous.items()
-            }
-        except (OSError, ValueError) as exc:
-            parser.error(f"Invalid retained failure manifest: {exc}")
-
     def unresolved_failure_count() -> int:
         return sum(len(items) for items in failed_entries.values())
 
