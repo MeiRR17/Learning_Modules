@@ -123,8 +123,11 @@ checkpoints rather than silently restarting. The checkpoint may be updated
 in place with `--cursor-out`. Previous failures are reported as a warning;
 they still need to be retried using their own failure manifest.
 
-The checkpoint is written only after the selected batch has finished; it
-is not an in-flight journal. A nonzero `failed` count means some selected
+The checkpoint is atomically updated after each completed file, including
+files that failed. If the process stops during a file, the checkpoint remains
+at the last completed entry rather than skipping an unfinished file. This
+makes `--cursor-in` useful after interrupted batches, not only completed
+batches. A nonzero `failed` count means some selected
 entries were unsuccessful: retry them using `failed.json` before considering
 the batch fully complete. The fingerprint can be compared to detect changes
 in the input manifest between batches. The checkpoint is not written in
