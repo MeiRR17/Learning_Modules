@@ -678,6 +678,12 @@ rounded to milliseconds, and `last_downloader_exit_code` records the
 most recent completed yt-dlp process exit code, when available. Each attempted subprocess also receives an `attempt_history` record
 containing its 1-based `attempt` number, `elapsed_seconds`, the
 `outcome` classification, and `exit_code` when yt-dlp returned one.
+Failed attempts include `failure_reason` (the error also shown in the
+terminal), and attempts followed by a scheduled retry include
+`retry_delay_seconds`. The delay is the configured exponential backoff,
+capped at 60 seconds, and is not included in `elapsed_seconds`.
+Terminal verification failures record a reason but do not schedule a retry
+under the current download policy.
 The stable outcome values are `completed` (process succeeded and the
 download passed verification), `verification_failed` (process exited
 successfully but output checks failed), `nonzero_exit`, `timeout`,
