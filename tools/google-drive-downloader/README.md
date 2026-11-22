@@ -167,6 +167,22 @@ Unlike other progress reports, the plan is intentionally written during
 A plan cannot replace the input manifest, credentials, checkpoint, or any
 declared download destination.
 
+Use the local-aware plan as a preflight gate for automation:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --dry-run --plan-out batch-plan.json --plan-inspect-local \
+  --fail-on-blocked-plan
+```
+
+`--fail-on-blocked-plan` requires both `--dry-run` and
+`--plan-inspect-local` (which itself requires `--plan-out`).
+After writing the plan, it returns exit code 1 when any selected file has
+`planned_action: "blocked"`; otherwise, the regular dry-run succeeds.
+The JSON plan is still available for troubleshooting failed preflight checks,
+and existing files are not changed. This option evaluates local blocking
+conditions, not network accessibility or permissions on remote Drive files.
+
 Inspect local files and estimate how much data remains to transfer:
 
 ```bash
