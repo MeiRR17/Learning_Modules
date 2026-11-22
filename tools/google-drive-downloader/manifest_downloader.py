@@ -162,6 +162,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Limit yt-dlp transfer rate per download (default: unlimited)")
     parser.add_argument("--max-file-size", type=int, metavar="BYTES",
                         help="Refuse files larger than this byte limit")
+    parser.add_argument("--max-batch-size", type=int, metavar="BYTES",
+                        help="Reject selected batches whose declared file sizes exceed this total")
     parser.add_argument("--quarantine-invalid", action="store_true",
                         help="Move invalid existing files aside before redownloading")
     parser.add_argument("--failed-manifest", type=Path)
@@ -278,6 +280,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--rate-limit must be a positive integer of bytes per second")
     if args.max_file_size is not None and args.max_file_size < 1:
         parser.error("--max-file-size must be a positive integer of bytes")
+    if args.max_batch_size is not None and args.max_batch_size < 1:
+        parser.error("--max-batch-size must be a positive integer of bytes")
 
     failed_entries = {}
     if args.retain_failures and args.failed_manifest:
@@ -387,6 +391,19 @@ def main(argv: list[str] | None = None) -> int:
             downloads = downloads[start:start + args.limit]
         else:
             downloads = downloads[start:]
+        if args.max_batch_size is not None:
+            unsized = [relative.as_posix() for _, relative, _, size in downloads if size is None]
+            if unsized:
+                parser.error(
+                    "--max-batch-size requires declared size for each selected file: "
+                    + ", ".join(unsized)
+                )
+            declared_total = sum(size for _, _, _, size in downloads)
+            if declared_total > args.max_batch_size:
+                parser.error(
+                    f"Selected batch declares {declared_total} bytes, "
+                    f"exceeding --max-batch-size {args.max_batch_size}"
+                )
         if args.require_sha256:
             missing_checksums = [
                 relative.as_posix() for _, relative, checksum, _ in downloads
