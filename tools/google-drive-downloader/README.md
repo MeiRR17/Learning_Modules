@@ -181,9 +181,21 @@ plan adds `local_state` (`matching`, `partial`, `missing`, `invalid`,
 size of the existing `.part` file. Complete files are considered matching
 only after checking any declared size and SHA-256; the
 `integrity_verified` field is true only when a checksum was verified.
-The `local_inspection` summary reports matching, partial, and blocked or
-invalid counts, the sum of known remaining-byte estimates, and how many
-estimates are unknown. Estimates exclude temporary-file overhead and may
+Each file also includes `planned_action`: `skip` for a matching
+existing file, `download` for a missing or empty target, `resume` for
+an existing partial file, `quarantine_and_download` for a nonempty
+mismatch when `--quarantine-invalid` is enabled, or `blocked` when
+the selected options cannot safely process the file. For example,
+`--max-file-size` can block an oversized file, and a nonempty checksum
+mismatch is blocked unless quarantine is requested. A partial file
+associated with an invalid completed file is not reused during quarantine.
+
+The `local_inspection` summary reports matching and partial counts,
+`blocked_or_invalid`, an `actions` breakdown by predicted action,
+the sum of known remaining-byte estimates for files not blocked, and how
+many such estimates are unknown. Blocked entries have
+`estimated_remaining_bytes: null`, not a transfer estimate.
+Estimates exclude temporary-file overhead and may
 change before a transfer runs. Local inspection can hash entire files when
 checksums are present, so it may take time on large archives. The
 `--dry-run` mode still does not download or mutate existing files.
