@@ -153,6 +153,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=float,
                         help="Maximum seconds per yt-dlp attempt (default: unlimited)")
     parser.add_argument("--failed-manifest", type=Path)
+    parser.add_argument("--retain-failures", action="store_true",
+                        help="Carry forward unresolved entries from an existing failed manifest")
     parser.add_argument("--status-out", type=Path,
                         help="Write a JSON report of individual file outcomes")
     parser.add_argument("--cursor-out", type=Path,
@@ -173,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
     selection.add_argument("--cursor-in", type=Path,
                            help="Resume using a checkpoint from --cursor-out")
     args = parser.parse_args(argv)
+    if args.retain_failures and not args.failed_manifest:
+        parser.error("--retain-failures requires --failed-manifest")
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be a positive integer")
     if args.max_failures is not None and args.max_failures < 1:
@@ -374,8 +378,19 @@ def main(argv: list[str] | None = None) -> int:
     failed = 0
     failed_entries = {}
     outcomes = []
+    if args.retain_failures and args.failed_manifest and args.failed_manifest.expanduser().exists():
+        try:
+            previous = json.loads(args.failed_manifest.expanduser().read_text(encoding="utf-8"))
+            # Validate the entire previous report before mutating anything.
+            list(entries(previous))
+            failed_entries = {
+                folder: [dict(item) for item in items]
+                for folder, items in previous.items()
+            }
+        except (OSError, ValueError) as exc:
+            parser.error(f"Invalid retained failure manifest: {exc}")
     if args.failed_manifest and not args.dry_run:
-        # Clear stale results at the start of a new selected batch.
+        # Retain previously unresolved entries only when explicitly requested.
         try:
             write_retry_manifest(args.failed_manifest.expanduser(), failed_entries)
         except (OSError, ValueError) as exc:
@@ -433,6 +448,17 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Stopping batch after {failed} failed files.", file=sys.stderr)
                 break
             destination = root / relative
+            # Reprocessing replaces any previously unresolved result for this
+            # exact target instead of accumulating duplicate retry entries.
+            if args.retain_failures:
+                folder_key = relative.parent.as_posix()
+                if folder_key in failed_entries:
+                    failed_entries[folder_key] = [
+                        item for item in failed_entries[folder_key]
+                        if item["name"] != relative.name
+                    ]
+                    if not failed_entries[folder_key]:
+                        del failed_entries[folder_key]
             outcome = {"path": relative.as_posix(), "status": "pending"}
             outcomes.append(outcome)
             print(f"[{index}/{len(downloads)}] {relative}", flush=True)
