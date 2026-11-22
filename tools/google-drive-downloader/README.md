@@ -21,6 +21,19 @@ mismatched sizes or checksums are **not overwritten**. New downloads are also
 checked against any supplied expectations. Size alone can detect truncation,
 but does not prove file integrity.
 
+Limit the transfer rate to reduce network load during large batches:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --rate-limit 1048576 --failed-manifest failed.json
+```
+
+`--rate-limit` accepts a positive integer in bytes per second; the example
+requests approximately 1 MiB/s per active download. It is passed to
+yt-dlp as `--limit-rate` on each download attempt. This is a transfer
+throttle, not a total batch time limit; use `--timeout` separately to
+bound an individual attempt. The default leaves yt-dlp's rate unrestricted.
+
 Reserve available storage during large batches:
 
 ```bash
