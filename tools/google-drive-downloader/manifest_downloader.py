@@ -507,21 +507,23 @@ def main(argv: list[str] | None = None) -> int:
                             "estimated_remaining_bytes": 0,
                         }
                     local_bytes = destination.stat().st_size
-                    invalid = (
-                        local_bytes == 0
-                        or (size is not None and local_bytes != size)
-                        or (
-                            args.max_file_size is not None
-                            and local_bytes > args.max_file_size
-                        )
-                        or (checksum is not None and sha256_file(destination) != checksum)
+                    reason = (
+                        "empty_file" if local_bytes == 0
+                        else "file_size_limit"
+                        if args.max_file_size is not None and local_bytes > args.max_file_size
+                        else "size_mismatch"
+                        if size is not None and local_bytes != size
+                        else "checksum_mismatch"
+                        if checksum is not None and sha256_file(destination) != checksum
+                        else None
                     )
                     return {
-                        "local_state": "invalid" if invalid else "matching",
-                        "planned_action": "blocked" if invalid else "verify",
+                        "local_state": "invalid" if reason else "matching",
+                        "planned_action": "blocked" if reason else "verify",
                         "local_bytes": local_bytes,
                         "estimated_remaining_bytes": 0,
-                        "integrity_verified": checksum is not None and not invalid,
+                        "integrity_verified": checksum is not None and reason is None,
+                        **({"integrity_issue": reason} if reason else {}),
                     }
                 if size is not None and args.max_file_size is not None and size > args.max_file_size:
                     return {
@@ -535,9 +537,15 @@ def main(argv: list[str] | None = None) -> int:
                             "local_state": "oversized", "planned_action": "blocked",
                             "local_bytes": local_bytes, "estimated_remaining_bytes": None,
                         }
-                    if local_bytes > 0 and (size is None or local_bytes == size) and (
-                        checksum is None or sha256_file(destination) == checksum
-                    ):
+                    issue = (
+                        "empty_file" if local_bytes == 0
+                        else "size_mismatch"
+                        if size is not None and local_bytes != size
+                        else "checksum_mismatch"
+                        if checksum is not None and sha256_file(destination) != checksum
+                        else None
+                    )
+                    if issue is None:
                         return {
                             "local_state": "matching", "planned_action": "skip",
                             "local_bytes": local_bytes, "estimated_remaining_bytes": 0,
@@ -549,6 +557,7 @@ def main(argv: list[str] | None = None) -> int:
                         return {
                             "local_state": "invalid", "planned_action": "blocked",
                             "local_bytes": local_bytes, "estimated_remaining_bytes": None,
+                            "integrity_issue": issue,
                         }
                     if local_bytes > 0:
                         action = "quarantine_and_download"
@@ -588,6 +597,7 @@ def main(argv: list[str] | None = None) -> int:
                     result["partial_bytes"] = part_bytes
                 if destination.is_file():
                     result["local_bytes"] = destination.stat().st_size
+                    result["integrity_issue"] = issue
                 return result
             except OSError as exc:
                 return {
@@ -612,10 +622,7 @@ def main(argv: list[str] | None = None) -> int:
                     "unreadable": "local_read_error",
                     "oversized": "file_size_limit",
                     "missing": "missing_for_verification",
-                    "invalid": (
-                        "invalid_for_verification" if args.verify_only
-                        else "existing_file_mismatch"
-                    ),
+                    "invalid": inspection.get("integrity_issue", "existing_file_mismatch"),
                 }.get(inspection["local_state"], "unavailable")
             entry.update(inspection)
             return entry
