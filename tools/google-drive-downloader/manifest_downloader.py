@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 from pathlib import Path, PurePosixPath
 from typing import Iterator
 
@@ -46,7 +47,7 @@ def relative_destination(value: str, *, allow_subdirs: bool) -> Path:
         raise ValueError(f"Unsafe relative path: {value!r}")
     if any(
         part.endswith((" ", "."))
-        or any(ord(char) < 32 or char in '<>"|?*' for char in part)
+        or any(ord(char) < 32 or ord(char) == 127 or char in '<>:"|?*' for char in part)
         or part.split(".", 1)[0].upper() in WINDOWS_RESERVED
         for part in parts
     ):
@@ -120,10 +121,17 @@ def entries(manifest: object) -> Iterator[tuple[str, Path, str | None, int | Non
                 raise ValueError(f"Invalid expected file size in {folder!r}")
             filename = relative_destination(item["name"], allow_subdirs=False)
             target = folder_path / filename
-            # Windows and macOS may treat distinct spellings as the same file.
-            identity = target.as_posix().casefold()
+            # Case-insensitive or Unicode-normalizing filesystems can alias
+            # differently encoded names. A file cannot also be a directory.
+            identity = unicodedata.normalize("NFC", target.as_posix()).casefold()
             if identity in seen:
                 raise ValueError(f"Duplicate destination: {target}")
+            if any(
+                identity.startswith(existing + "/")
+                or existing.startswith(identity + "/")
+                for existing in seen
+            ):
+                raise ValueError(f"File/directory destination collision: {target}")
             seen.add(identity)
             yield file_id, target, checksum.lower() if checksum else None, size
 
