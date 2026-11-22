@@ -1,0 +1,129 @@
+"""Download explicitly listed Google Drive files safely using yt-dlp.
+
+Manifest JSON:
+{
+  "Course/Week 1": [
+    {"id": "DRIVE_FILE_ID", "name": "lecture.mp4"}
+  ]
+}
+
+Usage: python manifest_downloader.py manifest.json --output downloads
+Use --dry-run to inspect destinations without invoking yt-dlp.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path, PurePosixPath
+from typing import Iterator
+
+DRIVE_ID = re.compile(r"^[A-Za-z0-9_-]{10,256}$")
+
+
+def relative_destination(value: str, *, allow_subdirs: bool) -> Path:
+    """Accept only safe, portable relative paths, without traversal."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Destination must be a nonempty string")
+    if "\\" in value or "\x00" in value:
+        raise ValueError("Backslashes and NUL bytes are not allowed in paths")
+    parts = PurePosixPath(value).parts
+    if value.startswith("/") or not parts or any(
+        part in ("", ".", "..") for part in value.split("/")
+    ):
+        raise ValueError(f"Unsafe relative path: {value!r}")
+    if any(":" in part or part.endswith((" ", ".")) for part in parts):
+        raise ValueError(f"Nonportable destination: {value!r}")
+    if not allow_subdirs and len(parts) != 1:
+        raise ValueError("File names cannot contain subdirectories")
+    return Path(*parts)
+
+
+def entries(manifest: object) -> Iterator[tuple[str, Path]]:
+    if not isinstance(manifest, dict):
+        raise ValueError("Manifest must be an object mapping folders to file lists")
+    seen: set[str] = set()
+    for folder, files in manifest.items():
+        folder_path = relative_destination(folder, allow_subdirs=True)
+        if not isinstance(files, list):
+            raise ValueError(f"Folder {folder!r} must contain a list")
+        for item in files:
+            if not isinstance(item, dict) or set(item) != {"id", "name"}:
+                raise ValueError("Each file must contain exactly 'id' and 'name'")
+            file_id = item["id"]
+            if not isinstance(file_id, str) or not DRIVE_ID.fullmatch(file_id):
+                raise ValueError(f"Invalid Drive file ID in {folder!r}")
+            filename = relative_destination(item["name"], allow_subdirs=False)
+            target = folder_path / filename
+            # Windows and macOS may treat distinct spellings as the same file.
+            identity = target.as_posix().casefold()
+            if identity in seen:
+                raise ValueError(f"Duplicate destination: {target}")
+            seen.add(identity)
+            yield file_id, target
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("manifest", type=Path, help="JSON file listing authorized downloads")
+    parser.add_argument("--output", type=Path, default=Path("downloads"))
+    parser.add_argument("--cookies", type=Path, help="Optional Netscape cookies.txt file")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args(argv)
+
+    try:
+        manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+        downloads = list(entries(manifest))  # Validate everything before writing.
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        parser.error(f"Invalid manifest: {exc}")
+
+    root = args.output.expanduser().resolve()
+    cookies = args.cookies.expanduser().resolve() if args.cookies else None
+    if cookies and not cookies.is_file():
+        parser.error(f"Cookies file does not exist: {cookies}")
+
+    if not downloads:
+        print("Manifest contains no downloads.")
+        return 0
+
+    failed = 0
+    for index, (file_id, relative) in enumerate(downloads, start=1):
+        destination = root / relative
+        print(f"[{index}/{len(downloads)}] {relative}", flush=True)
+        if args.dry_run:
+            continue
+        if destination.is_file() and destination.stat().st_size > 0:
+            print("  Already exists; skipped.")
+            continue
+        if destination.exists() and not destination.is_file():
+            print("  Destination is not a regular file; skipped.", file=sys.stderr)
+            failed += 1
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        command = [
+            sys.executable, "-m", "yt_dlp",
+            "--continue",
+            "--no-playlist",
+            "--format", "best[ext=mp4]/best",
+            "--output", str(destination),
+        ]
+        if cookies:
+            command.extend(["--cookies", str(cookies)])
+        command.append(f"https://drive.google.com/file/d/{file_id}/view")
+        try:
+            result = subprocess.run(command, check=False)
+            if result.returncode:
+                failed += 1
+                print(f"  Download failed (exit {result.returncode}).", file=sys.stderr)
+        except OSError as exc:
+            failed += 1
+            print(f"  Could not launch downloader: {exc}", file=sys.stderr)
+
+    print(f"Completed: {len(downloads) - failed}/{len(downloads)} entries successful or skipped.")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
