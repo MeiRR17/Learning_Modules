@@ -237,6 +237,17 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("Report destinations must all be distinct")
         if args.manifest.expanduser().resolve() in resolved_reports:
             parser.error("Report destination must differ from input manifest")
+        if args.cookies and args.cookies.expanduser().resolve() in resolved_reports:
+            parser.error("Report destination must differ from cookies file")
+        if args.cursor_in and args.cursor_out is None and (
+            args.cursor_in.expanduser().resolve() in resolved_reports
+        ):
+            parser.error("Reports cannot overwrite the input checkpoint")
+        if args.cursor_in and args.cursor_in.expanduser().resolve() in [
+            path.expanduser().resolve()
+            for path in (args.failed_manifest, args.status_out) if path is not None
+        ]:
+            parser.error("Retry and status reports cannot overwrite the input checkpoint")
 
     root = args.output.expanduser().resolve()
     cookies = args.cookies.expanduser().resolve() if args.cookies else None
