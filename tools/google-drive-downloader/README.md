@@ -113,7 +113,8 @@ python manifest_downloader.py manifest.json --output downloads \
 ```
 
 `--restore-quarantine-on-failure` requires `--quarantine-invalid`.
-After an unsuccessful replacement attempt, it restores the original
+After an unsuccessful replacement attempt **or a filesystem operation
+failure following quarantine**, it attempts to restore the original
 quarantined file only when **neither** a newly created destination nor a
 new `.part` file occupies the original paths. It also attempts to restore
 the previous partial file, if one was quarantined. The failed download
