@@ -177,6 +177,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Write selected files and declared metadata to JSON (also in dry-run)")
     parser.add_argument("--plan-inspect-local", action="store_true",
                         help="Inspect local destinations and partial files in --plan-out")
+    parser.add_argument("--fail-on-missing-checksum-plan", action="store_true",
+                        help="In dry-run, reject selected files without SHA-256 metadata")
     parser.add_argument("--fail-on-blocked-plan", action="store_true",
                         help="In dry-run, exit nonzero if the inspected plan contains blocked files")
     parser.add_argument("--fail-on-quarantine-plan", action="store_true",
@@ -215,6 +217,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--retain-failures requires --failed-manifest")
     if args.plan_inspect_local and not args.plan_out:
         parser.error("--plan-inspect-local requires --plan-out")
+    if args.fail_on_missing_checksum_plan and not (args.plan_out and args.dry_run):
+        parser.error("--fail-on-missing-checksum-plan requires --plan-out and --dry-run")
     if args.fail_on_blocked_plan and not (args.plan_inspect_local and args.dry_run):
         parser.error("--fail-on-blocked-plan requires --plan-inspect-local and --dry-run")
     if args.fail_on_unknown_size_plan and not (args.plan_inspect_local and args.dry_run):
@@ -666,6 +670,7 @@ def main(argv: list[str] | None = None) -> int:
             "selected": len(downloads),
             "declared_bytes": sum(size or 0 for _, _, _, size in downloads),
             "unknown_size_count": sum(size is None for _, _, _, size in downloads),
+            "missing_checksum_count": sum(checksum is None for _, _, checksum, _ in downloads),
             "files": planned_files,
             "mode": "verify-only" if args.verify_only else (
                 "dry-run" if args.dry_run else "download"
@@ -712,6 +717,14 @@ def main(argv: list[str] | None = None) -> int:
         # batches. Callers can inspect stable reason codes instead of
         # depending on stderr wording or exit status alone.
         checks = []
+        if args.fail_on_missing_checksum_plan:
+            missing_checksums = plan["missing_checksum_count"]
+            checks.append({
+                "code": "missing_sha256",
+                "passed": missing_checksums == 0,
+                "observed": missing_checksums,
+                "limit": 0,
+            })
         if args.plan_inspect_local:
             inspection = plan["local_inspection"]
             blocked = inspection["blocked_or_invalid"]
