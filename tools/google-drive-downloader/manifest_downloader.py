@@ -622,6 +622,16 @@ def main(argv: list[str] | None = None) -> int:
                         "estimated_remaining_bytes": None,
                     }
                 part_bytes = part_path.stat().st_size if part_path.is_file() else 0
+                if (
+                    action != "quarantine_and_download"
+                    and size is not None and part_bytes > size
+                ):
+                    return {
+                        "local_state": "oversized_partial",
+                        "planned_action": "blocked",
+                        "partial_bytes": part_bytes,
+                        "estimated_remaining_bytes": None,
+                    }
                 # When quarantining, even a partial file must be moved aside
                 # and the replacement starts from scratch.
                 if action == "quarantine_and_download":
@@ -663,6 +673,7 @@ def main(argv: list[str] | None = None) -> int:
                     "unsafe_partial": "unsafe_partial",
                     "unreadable": "local_read_error",
                     "oversized": "file_size_limit",
+                    "oversized_partial": "partial_size_mismatch",
                     "missing": "missing_for_verification",
                     "invalid": inspection.get("integrity_issue", "existing_file_mismatch"),
                 }.get(inspection["local_state"], "unavailable")
@@ -1181,6 +1192,16 @@ def main(argv: list[str] | None = None) -> int:
                 if part_path.exists() and not part_path.is_file():
                     fail("Partial download path is not a regular file.")
                     continue
+                if (
+                    size is not None and part_path.is_file()
+                    and part_path.stat().st_size > size
+                ):
+                    fail(
+                        f"Partial download exceeds expected file size "
+                        f"({part_path.stat().st_size} > {size} bytes); "
+                        "refusing unsafe resume."
+                    )
+                    continue
                 command = [
                     sys.executable, "-m", "yt_dlp",
                     "--continue",
@@ -1197,6 +1218,23 @@ def main(argv: list[str] | None = None) -> int:
                 command.append(f"https://drive.google.com/file/d/{file_id}/view")
                 failure = None
                 for attempt in range(1, args.attempts + 1):
+                    # A failed attempt may have left a larger partial file.
+                    # Reject that state even if the free-space reserve is off.
+                    if part_path.is_symlink() or (
+                        part_path.exists() and not part_path.is_file()
+                    ):
+                        failure = "Unsafe partial download path; refusing resume."
+                        break
+                    if (
+                        size is not None and part_path.is_file()
+                        and part_path.stat().st_size > size
+                    ):
+                        failure = (
+                            "Partial download exceeds expected file size "
+                            f"({part_path.stat().st_size} > {size} bytes); "
+                            "refusing unsafe resume."
+                        )
+                        break
                     if args.min_free_space:
                         # yt-dlp uses a .part file for resumed downloads. Count
                         # only bytes already stored in that file; recheck space
