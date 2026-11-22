@@ -898,6 +898,7 @@ def main(argv: list[str] | None = None) -> int:
     failed = 0
     attempts_used = 0
     attempt_budget_stopped = False
+    stop_reason = None
     outcomes = []
     def unresolved_failure_count() -> int:
         return sum(len(items) for items in failed_entries.values())
@@ -975,6 +976,8 @@ def main(argv: list[str] | None = None) -> int:
             "download_attempts": sum(item.get("download_attempts", 0) for item in outcomes),
             "max_total_attempts": args.max_total_attempts,
             "attempt_budget_exhausted": attempt_budget_stopped,
+            "stop_reason": stop_reason,
+            "unprocessed": len(downloads) - len(outcomes),
             "attempt_outcomes": {
                 status: sum(
                     attempt["outcome"] == status
@@ -1019,6 +1022,7 @@ def main(argv: list[str] | None = None) -> int:
             "download_attempts": attempts_used,
             "max_total_attempts": args.max_total_attempts,
             "attempt_budget_exhausted": attempt_budget_stopped,
+            "stop_reason": stop_reason,
             "matching_entries": total_matching,
             "has_more": start + len(outcomes) < total_matching,
         }
@@ -1098,10 +1102,12 @@ def main(argv: list[str] | None = None) -> int:
             # Check before selecting the next file: all previous outcomes have
             # already been atomically journaled by the per-file finally block.
             if args.max_failures is not None and failed >= args.max_failures:
+                stop_reason = "max_failures"
                 print(f"Stopping batch after {failed} failed files.", file=sys.stderr)
                 break
             if args.max_total_attempts is not None and attempts_used >= args.max_total_attempts:
                 attempt_budget_stopped = True
+                stop_reason = "max_total_attempts"
                 print(
                     f"Stopping batch after {attempts_used} downloader attempts.",
                     file=sys.stderr,
@@ -1284,6 +1290,7 @@ def main(argv: list[str] | None = None) -> int:
                         )
                         outcome["attempt_budget_exhausted"] = True
                         attempt_budget_stopped = True
+                        stop_reason = "max_total_attempts"
                         break
                     # A failed attempt may have left a larger partial file.
                     # Reject that state even if the free-space reserve is off.
@@ -1382,6 +1389,7 @@ def main(argv: list[str] | None = None) -> int:
                         ):
                             outcome["attempt_budget_exhausted"] = True
                             attempt_budget_stopped = True
+                            stop_reason = "max_total_attempts"
                             break
                         delay = min(args.retry_delay * (2 ** (attempt - 1)), 60.0)
                         attempt_record["retry_delay_seconds"] = delay
@@ -1396,15 +1404,18 @@ def main(argv: list[str] | None = None) -> int:
             except OSError as exc:
                 fail(f"File operation failed: {exc}")
             finally:
-                # The next file will not start once the global attempt cap
-                # is reached, even if this file succeeded. Record the stop
-                # before publishing the final per-file reports/checkpoint.
-                if (
-                    args.max_total_attempts is not None
-                    and attempts_used >= args.max_total_attempts
-                    and index < len(downloads)
-                ):
-                    attempt_budget_stopped = True
+                # Resolve the effective batch-stop reason before persisting
+                # reports. Failure cap takes precedence when both limits
+                # are reached after the same file; no more retry was denied.
+                if index < len(downloads) and not attempt_budget_stopped:
+                    if args.max_failures is not None and failed >= args.max_failures:
+                        stop_reason = "max_failures"
+                    elif (
+                        args.max_total_attempts is not None
+                        and attempts_used >= args.max_total_attempts
+                    ):
+                        attempt_budget_stopped = True
+                        stop_reason = "max_total_attempts"
                 # Run recovery even if a filesystem exception interrupted the
                 # download path after quarantine succeeded.
                 if outcome["status"] == "failed":
@@ -1453,7 +1464,7 @@ def main(argv: list[str] | None = None) -> int:
     unresolved = unresolved_failure_count()
     if args.retain_failures and unresolved:
         print(f"Unresolved retry entries: {unresolved}.", file=sys.stderr)
-    return 1 if failed or (args.retain_failures and unresolved) or attempt_budget_stopped else 0
+    return 1 if failed or (args.retain_failures and unresolved) or stop_reason is not None else 0
 
 
 if __name__ == "__main__":
