@@ -167,6 +167,24 @@ Unlike other progress reports, the plan is intentionally written during
 A plan cannot replace the input manifest, credentials, checkpoint, or any
 declared download destination.
 
+Limit the number of files requiring network transfers during preflight:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --dry-run --plan-out batch-plan.json --plan-inspect-local \
+  --max-planned-transfers 20
+```
+
+`--max-planned-transfers` requires `--dry-run` and
+`--plan-inspect-local` and accepts a nonnegative file count. It sums
+`download`, `resume`, and `quarantine_and_download` actions while
+excluding `skip`, `verify`, and `blocked`. The count appears as
+`local_inspection.planned_transfers`, and a rejected batch records the
+`planned_transfer_count` preflight check with the observed count and
+configured limit. A limit of zero permits only batches that require no
+new transfers. This is a planning policy, not a runtime network-request
+limit: a transfer may require several retry attempts.
+
 Cap how much existing data can be moved into quarantine backups:
 
 ```bash
@@ -332,7 +350,7 @@ Its `passed` field is true only if every **enabled** preflight
 policy passes. `checks` is empty when no preflight policy was
 enabled; that means no policy was evaluated, not that all files are safe.
 Supported check codes are `blocked_files`, `quarantine_required`, `unknown_transfer_size`,
-`transfer_size_known`, `estimated_transfer_budget`, `quarantine_bytes_budget`, `disk_space_estimate_known`, and `disk_space_available`.
+`transfer_size_known`, `estimated_transfer_budget`, `planned_transfer_count`, `quarantine_bytes_budget`, `disk_space_estimate_known`, and `disk_space_available`.
 Each check exposes the observed count or byte estimate and its limit.
 The plan is written before a failing preflight exits nonzero, so
 automation can examine `failed_codes` directly.
