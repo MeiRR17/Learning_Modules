@@ -13,6 +13,7 @@ Use --dry-run to inspect destinations without invoking yt-dlp.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -41,7 +42,24 @@ def relative_destination(value: str, *, allow_subdirs: bool) -> Path:
     return Path(*parts)
 
 
-def entries(manifest: object) -> Iterator[tuple[str, Path]]:
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def destination_is_safe(path: Path, root: Path) -> bool:
+    cursor = path
+    while cursor != root:
+        if cursor.is_symlink() or cursor == cursor.parent:
+            return False
+        cursor = cursor.parent
+    return not root.is_symlink()
+
+
+def entries(manifest: object) -> Iterator[tuple[str, Path, str | None]]:
     if not isinstance(manifest, dict):
         raise ValueError("Manifest must be an object mapping folders to file lists")
     seen: set[str] = set()
@@ -50,11 +68,14 @@ def entries(manifest: object) -> Iterator[tuple[str, Path]]:
         if not isinstance(files, list):
             raise ValueError(f"Folder {folder!r} must contain a list")
         for item in files:
-            if not isinstance(item, dict) or set(item) != {"id", "name"}:
-                raise ValueError("Each file must contain exactly 'id' and 'name'")
+            if not isinstance(item, dict) or not {"id", "name"} <= set(item) or set(item) - {"id", "name", "sha256"}:
+                raise ValueError("Each file requires 'id', 'name'; optionally 'sha256'")
             file_id = item["id"]
             if not isinstance(file_id, str) or not DRIVE_ID.fullmatch(file_id):
                 raise ValueError(f"Invalid Drive file ID in {folder!r}")
+            checksum = item.get("sha256")
+            if checksum is not None and (not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", checksum)):
+                raise ValueError(f"Invalid SHA-256 in {folder!r}")
             filename = relative_destination(item["name"], allow_subdirs=False)
             target = folder_path / filename
             # Windows and macOS may treat distinct spellings as the same file.
@@ -62,7 +83,7 @@ def entries(manifest: object) -> Iterator[tuple[str, Path]]:
             if identity in seen:
                 raise ValueError(f"Duplicate destination: {target}")
             seen.add(identity)
-            yield file_id, target
+            yield file_id, target, checksum.lower() if checksum else None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -89,13 +110,21 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     failed = 0
-    for index, (file_id, relative) in enumerate(downloads, start=1):
+    for index, (file_id, relative, checksum) in enumerate(downloads, start=1):
         destination = root / relative
         print(f"[{index}/{len(downloads)}] {relative}", flush=True)
         if args.dry_run:
             continue
+        if not destination_is_safe(destination, root):
+            print("  Symlink destination refused.", file=sys.stderr)
+            failed += 1
+            continue
         if destination.is_file() and destination.stat().st_size > 0:
-            print("  Already exists; skipped.")
+            if checksum is None or sha256_file(destination) == checksum:
+                print("  Already exists; skipped.")
+                continue
+            print("  Existing file checksum mismatch; refusing overwrite.", file=sys.stderr)
+            failed += 1
             continue
         if destination.exists() and not destination.is_file():
             print("  Destination is not a regular file; skipped.", file=sys.stderr)
@@ -117,6 +146,9 @@ def main(argv: list[str] | None = None) -> int:
             if result.returncode:
                 failed += 1
                 print(f"  Download failed (exit {result.returncode}).", file=sys.stderr)
+            elif checksum and (not destination.is_file() or sha256_file(destination) != checksum):
+                failed += 1
+                print("  Downloaded file SHA-256 mismatch.", file=sys.stderr)
         except OSError as exc:
             failed += 1
             print(f"  Could not launch downloader: {exc}", file=sys.stderr)
