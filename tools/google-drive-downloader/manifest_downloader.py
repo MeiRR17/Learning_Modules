@@ -203,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
         downloads = list(entries(manifest))  # Validate everything before writing.
+        # Protect every declared destination, including unselected batches.
+        all_destinations = [entry[1] for entry in downloads]
         if selected_folders:
             downloads = [
                 entry for entry in downloads
@@ -259,6 +261,18 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("Retry and status reports cannot overwrite the input checkpoint")
 
     root = args.output.expanduser().resolve()
+    # Refuse any collision between a generated file and sensitive inputs or
+    # reports before initializing the retry manifest or invoking yt-dlp.
+    declared_paths = {(root / relative).resolve() for relative in all_destinations}
+    inputs = [
+        path.expanduser().resolve()
+        for path in (args.manifest, args.cookies, args.cursor_in)
+        if path is not None
+    ]
+    if any(path in declared_paths for path in inputs):
+        parser.error("A manifest destination overlaps an input or credentials file")
+    if not args.dry_run and any(path in declared_paths for path in resolved_reports):
+        parser.error("A report destination overlaps a manifest download destination")
     cookies = args.cookies.expanduser().resolve() if args.cookies else None
     if cookies and not args.verify_only and not args.dry_run and not cookies.is_file():
         parser.error(f"Cookies file does not exist: {cookies}")
