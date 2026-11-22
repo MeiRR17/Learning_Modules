@@ -87,7 +87,7 @@ def write_retry_manifest(path: Path, manifest: dict[str, list[dict[str, str]]]) 
             temporary.unlink(missing_ok=True)
 
 
-def entries(manifest: object) -> Iterator[tuple[str, Path, str | None]]:
+def entries(manifest: object) -> Iterator[tuple[str, Path, str | None, int | None]]:
     if not isinstance(manifest, dict):
         raise ValueError("Manifest must be an object mapping folders to file lists")
     seen: set[str] = set()
@@ -96,7 +96,7 @@ def entries(manifest: object) -> Iterator[tuple[str, Path, str | None]]:
         if not isinstance(files, list):
             raise ValueError(f"Folder {folder!r} must contain a list")
         for item in files:
-            if not isinstance(item, dict) or not {"id", "name"} <= set(item) or set(item) - {"id", "name", "sha256"}:
+            if not isinstance(item, dict) or not {"id", "name"} <= set(item) or set(item) - {"id", "name", "sha256", "size"}:
                 raise ValueError("Each file requires 'id', 'name'; optionally 'sha256'")
             file_id = item["id"]
             if not isinstance(file_id, str) or not DRIVE_ID.fullmatch(file_id):
@@ -104,6 +104,9 @@ def entries(manifest: object) -> Iterator[tuple[str, Path, str | None]]:
             checksum = item.get("sha256")
             if checksum is not None and (not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", checksum)):
                 raise ValueError(f"Invalid SHA-256 in {folder!r}")
+            size = item.get("size")
+            if size is not None and (type(size) is not int or size < 1):
+                raise ValueError(f"Invalid expected file size in {folder!r}")
             filename = relative_destination(item["name"], allow_subdirs=False)
             target = folder_path / filename
             # Windows and macOS may treat distinct spellings as the same file.
@@ -111,7 +114,7 @@ def entries(manifest: object) -> Iterator[tuple[str, Path, str | None]]:
             if identity in seen:
                 raise ValueError(f"Duplicate destination: {target}")
             seen.add(identity)
-            yield file_id, target, checksum.lower() if checksum else None
+            yield file_id, target, checksum.lower() if checksum else None, size
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -157,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
 
     failed = 0
     failed_entries = {}
-    for index, (file_id, relative, checksum) in enumerate(downloads, start=1):
+    for index, (file_id, relative, checksum, size) in enumerate(downloads, start=1):
         destination = root / relative
         print(f"[{index}/{len(downloads)}] {relative}", flush=True)
         def fail(reason):
@@ -166,6 +169,8 @@ def main(argv: list[str] | None = None) -> int:
             item = {"id": file_id, "name": relative.name}
             if checksum:
                 item["sha256"] = checksum
+            if size is not None:
+                item["size"] = size
             failed_entries.setdefault(relative.parent.as_posix(), []).append(item)
             print(f"  {reason}", file=sys.stderr)
 
@@ -179,18 +184,24 @@ def main(argv: list[str] | None = None) -> int:
                 fail("Missing or non-regular local file.")
             elif destination.stat().st_size == 0:
                 fail("Local file is empty.")
+            elif size is not None and destination.stat().st_size != size:
+                fail(f"Local file size mismatch (expected {size} bytes).")
             elif checksum and sha256_file(destination) != checksum:
                 fail("Local file SHA-256 mismatch.")
             elif checksum:
                 print("  SHA-256 verified.")
+            elif size is not None:
+                print("  File size verified; no checksum provided (integrity unverified).")
             else:
                 print("  File present; no checksum provided (integrity unverified).")
             continue
         if destination.is_file() and destination.stat().st_size > 0:
-            if checksum is None or sha256_file(destination) == checksum:
+            if (size is None or destination.stat().st_size == size) and (
+                checksum is None or sha256_file(destination) == checksum
+            ):
                 print("  Already exists; skipped.")
                 continue
-            fail("Existing file checksum mismatch; refusing overwrite.")
+            fail("Existing file size or checksum mismatch; refusing overwrite.")
             continue
         if destination.exists() and not destination.is_file():
             fail("Destination is not a regular file; skipped.")
@@ -214,9 +225,11 @@ def main(argv: list[str] | None = None) -> int:
                 failure = f"Could not launch downloader: {exc}"
                 break
             if result.returncode == 0:
-                if checksum and (
-                    not destination.is_file() or sha256_file(destination) != checksum
-                ):
+                if not destination.is_file() or destination.stat().st_size == 0:
+                    failure = "Downloader succeeded but output file is missing or empty."
+                elif size is not None and destination.stat().st_size != size:
+                    failure = f"Downloaded file size mismatch (expected {size} bytes)."
+                elif checksum and sha256_file(destination) != checksum:
                     failure = "Downloaded file SHA-256 mismatch."
                 else:
                     failure = None
