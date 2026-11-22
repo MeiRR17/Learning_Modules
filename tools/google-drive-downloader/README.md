@@ -167,6 +167,28 @@ Unlike other progress reports, the plan is intentionally written during
 A plan cannot replace the input manifest, credentials, checkpoint, or any
 declared download destination.
 
+Cap how much existing data can be moved into quarantine backups:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --dry-run --plan-out batch-plan.json --plan-inspect-local \
+  --quarantine-invalid --max-quarantine-bytes 1073741824
+```
+
+`--max-quarantine-bytes` accepts a nonnegative byte limit (1 GiB in the
+example) and requires `--dry-run` with `--plan-inspect-local`. For each
+`quarantine_and_download` entry, the plan includes `quarantine_bytes`,
+the combined size of its current destination and any associated
+`.part` file that would be moved aside. The summary field
+`local_inspection.quarantine_bytes` totals these values. If that total
+exceeds the limit, preflight fails with check code
+`quarantine_bytes_budget`, preserving the JSON plan for inspection.
+A zero limit rejects any nonempty quarantine candidate. This limit
+controls the *planned amount of existing data retained as backups*;
+it does not bound download size, disk growth, or quarantine operations
+performed by later separate runs. Without `--quarantine-invalid`, invalid
+files are blocked and no quarantine bytes are planned.
+
 Require manual review before replacing mismatched local files:
 
 ```bash
@@ -310,7 +332,7 @@ Its `passed` field is true only if every **enabled** preflight
 policy passes. `checks` is empty when no preflight policy was
 enabled; that means no policy was evaluated, not that all files are safe.
 Supported check codes are `blocked_files`, `quarantine_required`, `unknown_transfer_size`,
-`transfer_size_known`, `estimated_transfer_budget`, `disk_space_estimate_known`, and `disk_space_available`.
+`transfer_size_known`, `estimated_transfer_budget`, `quarantine_bytes_budget`, `disk_space_estimate_known`, and `disk_space_available`.
 Each check exposes the observed count or byte estimate and its limit.
 The plan is written before a failing preflight exits nonzero, so
 automation can examine `failed_codes` directly.
