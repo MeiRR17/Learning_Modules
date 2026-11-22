@@ -130,6 +130,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--attempts", type=int, default=3)
     parser.add_argument("--retry-delay", type=float, default=2.0)
     parser.add_argument("--failed-manifest", type=Path)
+    parser.add_argument("--status-out", type=Path,
+                        help="Write a JSON report of individual file outcomes")
     parser.add_argument("--cursor-out", type=Path,
                         help="Write a JSON checkpoint containing the last processed path")
     parser.add_argument("--folder", action="append", default=[],
@@ -225,14 +227,14 @@ def main(argv: list[str] | None = None) -> int:
     # replace the user's original manifest (including through symlink aliases).
     if not args.dry_run:
         reports = [
-            path.expanduser() for path in (args.failed_manifest, args.cursor_out)
+            path.expanduser() for path in (args.failed_manifest, args.cursor_out, args.status_out)
             if path is not None
         ]
         resolved_reports = [path.resolve() for path in reports]
         if any(path.is_symlink() for path in reports):
             parser.error("Report destination must not be a symlink")
         if len(set(resolved_reports)) != len(resolved_reports):
-            parser.error("--cursor-out and --failed-manifest must be distinct")
+            parser.error("Report destinations must all be distinct")
         if args.manifest.expanduser().resolve() in resolved_reports:
             parser.error("Report destination must differ from input manifest")
 
@@ -251,12 +253,17 @@ def main(argv: list[str] | None = None) -> int:
 
     failed = 0
     failed_entries = {}
+    outcomes = []
     for index, (file_id, relative, checksum, size) in enumerate(downloads, start=1):
         destination = root / relative
+        outcome = {"path": relative.as_posix(), "status": "pending"}
+        outcomes.append(outcome)
         print(f"[{index}/{len(downloads)}] {relative}", flush=True)
         def fail(reason):
             nonlocal failed
             failed += 1
+            outcome["status"] = "failed"
+            outcome["reason"] = reason
             item = {"id": file_id, "name": relative.name}
             if checksum:
                 item["sha256"] = checksum
@@ -266,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {reason}", file=sys.stderr)
 
         if args.dry_run:
+            outcome["status"] = "planned"
             continue
         if not destination_is_safe(destination, root):
             fail("Symlink destination refused.")
@@ -280,16 +288,20 @@ def main(argv: list[str] | None = None) -> int:
             elif checksum and sha256_file(destination) != checksum:
                 fail("Local file SHA-256 mismatch.")
             elif checksum:
+                outcome["status"] = "verified"
                 print("  SHA-256 verified.")
             elif size is not None:
+                outcome["status"] = "size-checked"
                 print("  File size verified; no checksum provided (integrity unverified).")
             else:
+                outcome["status"] = "present"
                 print("  File present; no checksum provided (integrity unverified).")
             continue
         if destination.is_file() and destination.stat().st_size > 0:
             if (size is None or destination.stat().st_size == size) and (
                 checksum is None or sha256_file(destination) == checksum
             ):
+                outcome["status"] = "skipped"
                 print("  Already exists; skipped.")
                 continue
             fail("Existing file size or checksum mismatch; refusing overwrite.")
@@ -332,6 +344,22 @@ def main(argv: list[str] | None = None) -> int:
                 time.sleep(delay)
         if failure:
             fail(failure)
+        else:
+            outcome["status"] = "downloaded"
+
+    if args.status_out and not args.dry_run:
+        counts = {}
+        for item in outcomes:
+            status = item["status"]
+            counts[status] = counts.get(status, 0) + 1
+        report = {"schema_version": 1, "selected": len(downloads),
+                  "counts": counts, "files": outcomes}
+        try:
+            write_retry_manifest(args.status_out.expanduser(), report)
+        except (OSError, ValueError) as exc:
+            print(f"Failed to write status report: {exc}", file=sys.stderr)
+            return 1
+        print(f"Status report written: {args.status_out}")
 
     if args.failed_manifest and not args.dry_run:
         report = args.failed_manifest.expanduser()
