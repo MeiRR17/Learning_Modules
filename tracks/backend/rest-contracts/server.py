@@ -157,6 +157,7 @@ def handler_factory(store: Store):
             port = self.server.server_port
             if host not in (f"127.0.0.1:{port}", f"localhost:{port}"):
                 self.error(HTTPStatus.FORBIDDEN, "invalid_host", "Use the loopback host and configured port")
+                self.close_connection = True
                 return False
             if mutation:
                 origin = self.headers.get("Origin")
@@ -164,6 +165,7 @@ def handler_factory(store: Store):
                     f"http://127.0.0.1:{port}", f"http://localhost:{port}"
                 ):
                     self.error(HTTPStatus.FORBIDDEN, "invalid_origin", "Cross-origin mutation is disabled")
+                    self.close_connection = True
                     return False
             return True
 
@@ -202,8 +204,13 @@ def handler_factory(store: Store):
                 self.error(HTTPStatus.BAD_REQUEST, "content_length", "One explicit Content-Length is required")
                 self.close_connection = True
                 return None
-            if self.headers.get("Content-Type", "").lower().split(";")[0].strip() != "application/json":
-                self.error(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "content_type", "Expected application/json")
+            media_type = [part.strip().lower() for part in self.headers.get(
+                "Content-Type", "").split(";")]
+            if (media_type[0] != "application/json"
+                    or len(media_type) > 2
+                    or (len(media_type) == 2 and media_type[1] != "charset=utf-8")):
+                self.error(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "content_type",
+                           "Expected application/json with optional UTF-8 charset")
                 self.close_connection = True
                 return None
             try:
@@ -341,8 +348,10 @@ def handler_factory(store: Store):
             kind, task_id, query = self.route()
             if kind != "item":
                 self.error(HTTPStatus.NOT_FOUND, "not_found", "Endpoint not found")
+                self.close_connection = True
                 return
             if not self.require_no_query(query):
+                self.close_connection = True
                 return
             expected = self.expected_version()
             if expected is None:
