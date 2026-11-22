@@ -226,8 +226,9 @@ entry and actual progress. The `has_more` field remains true when entries
 are still waiting. The failed-entry manifest contains all failures observed
 before stopping. It is initialized at batch start and atomically updated
 after each processed file, so a crash or interruption preserves failures
-recorded so far. Every new run starts a fresh failure list at the supplied
-path; save old retry manifests elsewhere before reusing that path. Those
+recorded so far. By default, every new run starts a fresh failure list at the supplied
+path; save old retry manifests elsewhere before reusing that path, or
+use `--retain-failures` to preserve unresolved entries. Those
 failed entries must be retried separately; resuming from the checkpoint
 moves forward and does not retry them automatically.
 
@@ -246,6 +247,24 @@ downloader exit. Once attempts are exhausted, the file is marked failed
 and appears in both status and retry manifests when enabled. This is a
 **per-attempt** deadline rather than a timeout for the entire batch.
 Timeouts can leave partial downloads on disk, which yt-dlp may resume.
+
+Keep unresolved failures from earlier batches in a single retry manifest:
+
+```bash
+python manifest_downloader.py manifest.json --limit 20 \
+  --failed-manifest failed.json --retain-failures \
+  --cursor-in checkpoint.json --cursor-out checkpoint.json
+```
+
+`--retain-failures` requires `--failed-manifest`. If the retry report
+already exists, it is loaded and validated before downloads begin. Failures
+from earlier batches are retained; when an entry is processed again, a
+successful outcome removes its old retry record, while a failed outcome
+replaces that record without duplicates. An interrupted pending item keeps
+its previous record. An empty selection does not clear the retained retry
+manifest. Without `--retain-failures`, each run replaces the retry list as
+before. Use a separate input manifest when retrying failures, since an
+output retry manifest cannot overwrite the active input manifest.
 
 Download files you are authorized to access:
 
