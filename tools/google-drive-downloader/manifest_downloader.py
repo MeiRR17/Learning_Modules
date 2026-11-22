@@ -340,6 +340,24 @@ def main(argv: list[str] | None = None) -> int:
     if cookies and not args.verify_only and not args.dry_run and not cookies.is_file():
         parser.error(f"Cookies file does not exist: {cookies}")
 
+    failed = 0
+    failed_entries = {}
+    outcomes = []
+    if args.retain_failures and args.failed_manifest and args.failed_manifest.expanduser().exists():
+        try:
+            previous = json.loads(args.failed_manifest.expanduser().read_text(encoding="utf-8"))
+            # Validate retained entries before any report is replaced.
+            list(entries(previous))
+            failed_entries = {
+                folder: [dict(item) for item in items]
+                for folder, items in previous.items()
+            }
+        except (OSError, ValueError) as exc:
+            parser.error(f"Invalid retained failure manifest: {exc}")
+
+    def unresolved_failure_count() -> int:
+        return sum(len(items) for items in failed_entries.values())
+
     if not downloads:
         print(f"No downloads selected (matched {total_matching}; start index {start}).")
         if not args.dry_run:
@@ -363,32 +381,20 @@ def main(argv: list[str] | None = None) -> int:
                         "after": resume_after.as_posix() if resume_after else None,
                         "processed": 0,
                         "failed": 0,
+                        "unresolved_failures": unresolved_failure_count(),
                         "matching_entries": total_matching,
                         "has_more": False,
                     })
             except (OSError, ValueError) as exc:
                 print(f"Failed to write empty-batch reports: {exc}", file=sys.stderr)
                 return 1
-        return 0
+        return 1 if args.retain_failures and unresolved_failure_count() else 0
     print(
         f"Selected {len(downloads)} of {total_matching} matching entries "
         f"(start index {start})."
     )
 
-    failed = 0
-    failed_entries = {}
-    outcomes = []
-    if args.retain_failures and args.failed_manifest and args.failed_manifest.expanduser().exists():
-        try:
-            previous = json.loads(args.failed_manifest.expanduser().read_text(encoding="utf-8"))
-            # Validate the entire previous report before mutating anything.
-            list(entries(previous))
-            failed_entries = {
-                folder: [dict(item) for item in items]
-                for folder, items in previous.items()
-            }
-        except (OSError, ValueError) as exc:
-            parser.error(f"Invalid retained failure manifest: {exc}")
+    if args.failed_manifest and not args.dry_run:
     if args.failed_manifest and not args.dry_run:
         # Retain previously unresolved entries only when explicitly requested.
         try:
@@ -435,6 +441,7 @@ def main(argv: list[str] | None = None) -> int:
             "after": outcomes[-1]["path"],
             "processed": len(outcomes),
             "failed": failed,
+            "unresolved_failures": unresolved_failure_count(),
             "matching_entries": total_matching,
             "has_more": start + len(outcomes) < total_matching,
         }
@@ -589,7 +596,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Local verification completed: {processed - failed}/{processed} checked; {len(downloads) - processed} unprocessed.")
     else:
         print(f"Completed: {processed - failed}/{processed} entries successful or skipped; {len(downloads) - processed} unprocessed.")
-    return 1 if failed else 0
+    unresolved = unresolved_failure_count()
+    if args.retain_failures and unresolved:
+        print(f"Unresolved retry entries: {unresolved}.", file=sys.stderr)
+    return 1 if failed or (args.retain_failures and unresolved) else 0
 
 
 if __name__ == "__main__":
