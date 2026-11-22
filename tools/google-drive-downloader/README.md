@@ -75,6 +75,30 @@ cursor is missing, the command fails rather than silently starting over.
 `--after` and `--offset` cannot be combined. Reordering entries or removing
 the cursor from the manifest can still change which files follow it.
 
+Save a machine-readable checkpoint at the end of a batch:
+
+```bash
+python manifest_downloader.py manifest.json --limit 10 \
+  --failed-manifest failed.json --cursor-out checkpoint.json
+```
+
+`checkpoint.json` includes `after` (the last selected destination),
+`processed`, `failed`, `matching_entries`, `has_more`, and
+`manifest_sha256`. Use `after` in the next invocation:
+
+```bash
+python manifest_downloader.py manifest.json \
+  --after "Course/Week 1/lecture.mp4" --limit 10 \
+  --failed-manifest failed-next.json --cursor-out checkpoint-next.json
+```
+
+The checkpoint is written only after the selected batch has finished; it
+is not an in-flight journal. A nonzero `failed` count means some selected
+entries were unsuccessful: retry them using `failed.json` before considering
+the batch fully complete. The fingerprint can be compared to detect changes
+in the input manifest between batches. The checkpoint is not written in
+`--dry-run` mode, and its path cannot be the input or failure manifest.
+
 Folder filtering happens before offset and limit are applied. All manifest
 entries are validated before selection, and retry reports include only
 failures from the selected page. If the input manifest changes between
