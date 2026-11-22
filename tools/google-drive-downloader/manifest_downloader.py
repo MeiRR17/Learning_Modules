@@ -181,6 +181,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="In dry-run, exit nonzero if the inspected plan contains blocked files")
     parser.add_argument("--fail-on-quarantine-plan", action="store_true",
                         help="In dry-run, reject plans requiring quarantine of existing files")
+    parser.add_argument("--max-quarantine-bytes", type=int, metavar="BYTES",
+                        help="In dry-run, cap total existing data that would be quarantined")
     parser.add_argument("--fail-on-disk-space-plan", action="store_true",
                         help="In dry-run, reject a plan that cannot fit with --min-free-space reserve")
     parser.add_argument("--fail-on-unknown-size-plan", action="store_true",
@@ -217,6 +219,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--fail-on-unknown-size-plan requires --plan-inspect-local and --dry-run")
     if args.fail_on_quarantine_plan and not (args.plan_inspect_local and args.dry_run):
         parser.error("--fail-on-quarantine-plan requires --plan-inspect-local and --dry-run")
+    if args.max_quarantine_bytes is not None:
+        if args.max_quarantine_bytes < 0:
+            parser.error("--max-quarantine-bytes must be zero or greater")
+        if not (args.plan_inspect_local and args.dry_run):
+            parser.error("--max-quarantine-bytes requires --plan-inspect-local and --dry-run")
     if args.fail_on_disk_space_plan and not (args.plan_inspect_local and args.dry_run):
         parser.error("--fail-on-disk-space-plan requires --plan-inspect-local and --dry-run")
     if args.max_estimated_transfer is not None:
@@ -632,6 +639,11 @@ def main(argv: list[str] | None = None) -> int:
                     "missing": "missing_for_verification",
                     "invalid": inspection.get("integrity_issue", "existing_file_mismatch"),
                 }.get(inspection["local_state"], "unavailable")
+            if inspection["planned_action"] == "quarantine_and_download":
+                inspection["quarantine_bytes"] = (
+                    inspection.get("local_bytes", 0)
+                    + inspection.get("partial_bytes", 0)
+                )
             entry.update(inspection)
             return entry
 
@@ -665,6 +677,9 @@ def main(argv: list[str] | None = None) -> int:
                 "actions": actions,
                 "matching": sum(item["local_state"] == "matching" for item in planned_files),
                 "partial": sum(item["local_state"] == "partial" for item in planned_files),
+                "quarantine_bytes": sum(
+                    item.get("quarantine_bytes", 0) for item in planned_files
+                ),
                 "blocked_or_invalid": sum(
                     item["planned_action"] == "blocked" for item in planned_files
                 ),
@@ -705,6 +720,14 @@ def main(argv: list[str] | None = None) -> int:
                     "passed": quarantine_count == 0,
                     "observed": quarantine_count,
                     "limit": 0,
+                })
+            if args.max_quarantine_bytes is not None:
+                quarantine_bytes = inspection["quarantine_bytes"]
+                checks.append({
+                    "code": "quarantine_bytes_budget",
+                    "passed": quarantine_bytes <= args.max_quarantine_bytes,
+                    "observed": quarantine_bytes,
+                    "limit": args.max_quarantine_bytes,
                 })
             if args.fail_on_unknown_size_plan:
                 checks.append({
