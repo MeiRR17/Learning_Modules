@@ -41,6 +41,21 @@ size but **cannot** establish cryptographic integrity. The resulting report is a
 that need attention. The `--verify-only` and `--dry-run` modes are mutually
 exclusive.
 
+Select a specific folder, or cap the number of selected files:
+
+```bash
+python manifest_downloader.py manifest.json --folder "Course/Week 1" --limit 10
+python manifest_downloader.py manifest.json --folder "Course/Week 1" \
+  --folder "Other Course" --verify-only
+```
+
+Folders are matched as complete relative paths, including their descendants,
+not arbitrary string prefixes. Repeating `--folder` combines selections.
+`--limit` selects the first N matching entries in manifest order. All
+manifest entries are validated before the selection is applied, and retry
+reports include only failures from the selected entries. For complete coverage,
+run without `--limit` after smaller batches.
+
 Download files you are authorized to access:
 
 ```bash
