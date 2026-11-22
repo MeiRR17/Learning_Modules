@@ -141,6 +141,25 @@ so far, but does not itself resume the batch. Use `--cursor-in` for completed
 batch checkpoints or rerun the original manifest to skip eligible files.
 Report files cannot overwrite the manifest, cookies, or input checkpoint.
 
+Stop a large batch when repeated failures suggest unavailable files or
+network trouble:
+
+```bash
+python manifest_downloader.py manifest.json --limit 50 --max-failures 3 \
+  --status-out status.json --failed-manifest failed.json \
+  --cursor-out checkpoint.json
+```
+
+`--max-failures` accepts a positive integer and counts failed **files**,
+not individual yt-dlp retry attempts. The default is to process the entire
+selected batch. When the threshold is reached, no further files are started;
+the JSON status report contains results only for processed entries, and the
+checkpoint's `after` and `processed` fields identify the last processed
+entry and actual progress. The `has_more` field remains true when entries
+are still waiting. The failed-entry manifest contains all failures observed
+before stopping. Those failed entries must be retried separately; resuming
+from the checkpoint moves forward and does not retry them automatically.
+
 Download files you are authorized to access:
 
 ```bash
