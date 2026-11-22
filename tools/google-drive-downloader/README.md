@@ -60,6 +60,21 @@ python manifest_downloader.py manifest.json --limit 10 --offset 10
 python manifest_downloader.py manifest.json --limit 10 --offset 20
 ```
 
+Alternatively, resume directly after a known file destination using
+`--after`. This is useful if entries were inserted before your previous
+batch, because it does not depend on their numeric positions:
+
+```bash
+python manifest_downloader.py manifest.json --after "Course/Week 1/lecture.mp4" --limit 10
+```
+
+The path must exactly match a file destination in the currently selected
+manifest (using forward slashes). That file itself is excluded from the
+new batch. Folder filtering is applied before the cursor lookup; if the
+cursor is missing, the command fails rather than silently starting over.
+`--after` and `--offset` cannot be combined. Reordering entries or removing
+the cursor from the manifest can still change which files follow it.
+
 Folder filtering happens before offset and limit are applied. All manifest
 entries are validated before selection, and retry reports include only
 failures from the selected page. If the input manifest changes between
