@@ -167,6 +167,26 @@ Unlike other progress reports, the plan is intentionally written during
 A plan cannot replace the input manifest, credentials, checkpoint, or any
 declared download destination.
 
+Require manual review before replacing mismatched local files:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --dry-run --plan-out batch-plan.json --plan-inspect-local \
+  --quarantine-invalid --fail-on-quarantine-plan
+```
+
+`--fail-on-quarantine-plan` requires both `--dry-run` and
+`--plan-inspect-local` (and therefore `--plan-out`). It returns a
+nonzero exit code when any selected file has
+`planned_action: "quarantine_and_download"`. The resulting JSON
+`preflight.checks` entry uses the code `quarantine_required`, with
+the number of affected files in `observed` and zero in `limit`.
+The plan is always written before this policy rejects the batch.
+Without `--quarantine-invalid`, mismatched nonempty files appear as
+`blocked` instead, so combine this policy with
+`--fail-on-blocked-plan` for complete preflight coverage. No files
+are quarantined in dry-run mode.
+
 Use the local-aware plan as a preflight gate for automation:
 
 ```bash
@@ -266,7 +286,7 @@ The `preflight` object is included whenever `--plan-out` is used.
 Its `passed` field is true only if every **enabled** preflight
 policy passes. `checks` is empty when no preflight policy was
 enabled; that means no policy was evaluated, not that all files are safe.
-Supported check codes are `blocked_files`, `unknown_transfer_size`,
+Supported check codes are `blocked_files`, `quarantine_required`, `unknown_transfer_size`,
 `transfer_size_known`, and `estimated_transfer_budget`.
 Each check exposes the observed count or byte estimate and its limit.
 The plan is written before a failing preflight exits nonzero, so
