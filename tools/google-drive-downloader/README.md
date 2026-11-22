@@ -693,9 +693,15 @@ downloader stops scheduling retries and does not select another file.
 Skipped or already verified files do not consume the budget. A
 `--status-out` report includes `max_total_attempts` and
 `attempt_budget_exhausted` in addition to `download_attempts`.
-Incomplete batches caused by the limit exit nonzero. The regular
-`--cursor-out` checkpoint still advances only through processed files,
-so a subsequent run can resume remaining entries with a fresh budget.
+The `attempt_budget_exhausted` flag is true only when the limit
+prevents another retry or leaves selected files unprocessed. Simply
+using the last permitted attempt to finish the final selected file
+does not count as an interrupted batch. The `--cursor-out` checkpoint
+also stores `download_attempts`, `max_total_attempts`, and
+`attempt_budget_exhausted` for auditing a stopped batch. Incomplete
+batches caused by the limit exit nonzero. The checkpoint still advances
+only through processed files, so a subsequent run can resume remaining
+entries with a fresh budget.
 This is an invocation-count limit, not a network bandwidth or elapsed-time
 limit.
 
