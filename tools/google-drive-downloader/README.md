@@ -330,6 +330,23 @@ as blocked. The optional `error` field gives further filesystem detail
 for `local_read_error`. These reason codes describe local preflight
 conditions, not remote access failures.
 
+Require SHA-256 metadata for every selected file while still exporting a plan:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --dry-run --plan-out batch-plan.json --fail-on-missing-checksum-plan
+```
+
+`--fail-on-missing-checksum-plan` requires only `--dry-run` and
+`--plan-out`; local file inspection is optional. It rejects a batch if
+any selected manifest entry has no `sha256` field, with the failed check
+code `missing_sha256`. The plan includes `missing_checksum_count`
+even if this policy is not enabled, and writes the entire selected file
+list before failing. Unlike `--require-sha256`, which stops manifest
+processing immediately, this preflight policy lets automation inspect
+the exported plan to identify incomplete integrity metadata. It checks
+checksum availability, not whether a remote file's contents match.
+
 Read preflight policy results directly from the exported JSON plan:
 
 ```json
@@ -349,7 +366,7 @@ The `preflight` object is included whenever `--plan-out` is used.
 Its `passed` field is true only if every **enabled** preflight
 policy passes. `checks` is empty when no preflight policy was
 enabled; that means no policy was evaluated, not that all files are safe.
-Supported check codes are `blocked_files`, `quarantine_required`, `unknown_transfer_size`,
+Supported check codes are `missing_sha256`, `blocked_files`, `quarantine_required`, `unknown_transfer_size`,
 `transfer_size_known`, `estimated_transfer_budget`, `planned_transfer_count`, `quarantine_bytes_budget`, `disk_space_estimate_known`, and `disk_space_available`.
 Each check exposes the observed count or byte estimate and its limit.
 The plan is written before a failing preflight exits nonzero, so
