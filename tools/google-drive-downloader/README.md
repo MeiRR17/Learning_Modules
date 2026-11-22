@@ -219,6 +219,30 @@ Blocked files are not included in the transfer estimate; pair this
 with `--fail-on-blocked-plan` to reject those as well. The estimate is
 a planning value, not a hard runtime network-transfer cap.
 
+Diagnose blocked entries using stable reason codes in the local-aware plan:
+
+```json
+{
+  "local_inspection": {
+    "blocked_or_invalid": 2,
+    "blocked_reasons": {
+      "existing_file_mismatch": 1,
+      "unsafe_partial": 1
+    }
+  }
+}
+```
+
+When `--plan-inspect-local` is enabled, each entry whose
+`planned_action` is `blocked` includes a `blocked_reason`. The
+summary's `blocked_reasons` object counts files by reason. Reason codes
+are `unsafe_destination`, `unsafe_partial`, `local_read_error`,
+`file_size_limit`, `missing_for_verification`,
+`invalid_for_verification`, `existing_file_mismatch`, and
+`unavailable` (fallback). The optional `error` field gives further
+filesystem detail for `local_read_error`. These reason codes describe
+local preflight conditions, not remote access failures.
+
 Read preflight policy results directly from the exported JSON plan:
 
 ```json
