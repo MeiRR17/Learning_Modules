@@ -181,6 +181,14 @@ plan adds `local_state` (`matching`, `partial`, `missing`, `invalid`,
 size of the existing `.part` file. Complete files are considered matching
 only after checking any declared size and SHA-256; the
 `integrity_verified` field is true only when a checksum was verified.
+When `--verify-only` is enabled, a local-aware plan uses `verify` for
+files that satisfy the available checks and `blocked` for missing,
+unreadable, or invalid files. It never proposes downloads, resuming a
+partial transfer, or quarantining in verification mode. The plan's `mode`
+field identifies `verify-only`, `dry-run`, or `download`; the
+`local_inspection.actions` summary includes a `verify` count. A successful
+verification plan reports zero expected transfer bytes.
+
 Each file also includes `planned_action`: `skip` for a matching
 existing file, `download` for a missing or empty target, `resume` for
 an existing partial file, `quarantine_and_download` for a nonempty
