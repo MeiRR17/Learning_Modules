@@ -104,6 +104,28 @@ any entry lacks `sha256`. It works with downloads, `--verify-only`,
 current batch are not required to carry checksums. Without this flag, the
 existing optional-checksum behavior is unchanged.
 
+Optionally restore quarantined originals when a replacement download fails:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --quarantine-invalid --restore-quarantine-on-failure \
+  --status-out status.json --failed-manifest failed.json
+```
+
+`--restore-quarantine-on-failure` requires `--quarantine-invalid`.
+After an unsuccessful replacement attempt, it restores the original
+quarantined file only when **neither** a newly created destination nor a
+new `.part` file occupies the original paths. It also attempts to restore
+the previous partial file, if one was quarantined. The failed download
+remains a failure in the status and retry reports, even when restoration
+succeeds. In `--status-out`, the `quarantine_restore` value is
+`restored`, `original_restored`, `deferred_outputs_present`,
+`original_restore_failed`, or `partial_restore_failed`. When a move
+fails, `quarantine_restore_error` records the filesystem error.
+Remaining `quarantined_backup` and `quarantined_partial_backup`
+paths indicate backups that still need attention. This option does not
+overwrite new output or remove partial data to force a rollback.
+
 Recover from mismatched existing downloads without deleting the originals:
 
 ```bash
