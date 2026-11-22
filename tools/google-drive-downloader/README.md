@@ -135,7 +135,10 @@ and `selected`. Download runs use `downloaded` or `skipped` for successful
 files; offline verification uses `verified`, `size-checked`, or `present`
 depending on the available integrity metadata. Errors appear as `failed`.
 The status report does not include Google Drive IDs or cookies. The report
-is atomically written when the batch ends and is not produced in dry-run mode.
+is atomically updated after each selected file, including failures; it is not
+produced in dry-run mode. If interrupted, the report preserves outcomes written
+so far, but does not itself resume the batch. Use `--cursor-in` for completed
+batch checkpoints or rerun the original manifest to skip eligible files.
 Report files cannot overwrite the manifest, cookies, or input checkpoint.
 
 Download files you are authorized to access:
