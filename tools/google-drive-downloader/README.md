@@ -21,6 +21,20 @@ mismatched sizes or checksums are **not overwritten**. New downloads are also
 checked against any supplied expectations. Size alone can detect truncation,
 but does not prove file integrity.
 
+For integrity-sensitive archives, require SHA-256 checksums on every selected
+file:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --require-sha256 --verify-only
+```
+
+`--require-sha256` rejects the selected batch before file operations if
+any entry lacks `sha256`. It works with downloads, `--verify-only`,
+`--dry-run`, and file/folder selection filters. Entries excluded from the
+current batch are not required to carry checksums. Without this flag, the
+existing optional-checksum behavior is unchanged.
+
 ### Portable destination paths
 
 Manifest folder names and filenames must be relative and use forward slashes
@@ -261,7 +275,8 @@ already exists, it is loaded and validated before downloads begin. Failures
 from earlier batches are retained; when an entry is processed again, a
 successful outcome removes its old retry record, while a failed outcome
 replaces that record without duplicates. An interrupted pending item keeps
-its previous record. An empty selection does not clear the retained retry
+its previous record. A `--dry-run` preview never changes
+retained failure records. An empty selection does not clear the retained retry
 manifest. Checkpoints now include `unresolved_failures`, the total number of
 entries still requiring a retry across all retained batches, distinct from
 `failed` (failures encountered in the current batch). With
