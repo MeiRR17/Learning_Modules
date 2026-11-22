@@ -130,13 +130,36 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--attempts", type=int, default=3)
     parser.add_argument("--retry-delay", type=float, default=2.0)
     parser.add_argument("--failed-manifest", type=Path)
+    parser.add_argument("--folder", action="append", default=[],
+                        help="Only process this folder and its descendants (repeatable)")
+    parser.add_argument("--limit", type=int,
+                        help="Process at most N selected files")
     args = parser.parse_args(argv)
+    if args.limit is not None and args.limit < 1:
+        parser.error("--limit must be a positive integer")
+    try:
+        selected_folders = [
+            relative_destination(folder, allow_subdirs=True)
+            for folder in args.folder
+        ]
+    except ValueError as exc:
+        parser.error(f"Invalid --folder: {exc}")
     if args.attempts < 1 or not 0 <= args.retry_delay <= 3600:
         parser.error("Require --attempts >= 1 and 0 <= --retry-delay <= 3600")
 
     try:
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
         downloads = list(entries(manifest))  # Validate everything before writing.
+        if selected_folders:
+            downloads = [
+                entry for entry in downloads
+                if any(
+                    entry[1].parent == folder or folder in entry[1].parents
+                    for folder in selected_folders
+                )
+            ]
+        if args.limit is not None:
+            downloads = downloads[:args.limit]
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(f"Invalid manifest: {exc}")
 
@@ -155,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"Cookies file does not exist: {cookies}")
 
     if not downloads:
-        print("Manifest contains no downloads.")
+        print("No downloads selected.")
         return 0
 
     failed = 0
