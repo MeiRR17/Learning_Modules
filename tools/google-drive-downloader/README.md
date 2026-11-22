@@ -183,6 +183,23 @@ The JSON plan is still available for troubleshooting failed preflight checks,
 and existing files are not changed. This option evaluates local blocking
 conditions, not network accessibility or permissions on remote Drive files.
 
+To also require a known transfer-size estimate for every actionable file:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --dry-run --plan-out batch-plan.json --plan-inspect-local \
+  --fail-on-blocked-plan --fail-on-unknown-size-plan
+```
+
+`--fail-on-unknown-size-plan` requires the same dry-run and local-inspection
+options. It checks `local_inspection.unknown_estimate_count` and exits
+nonzero when any file eligible for download or resumption has no known
+remaining-byte estimate. Blocked files are excluded from this count because
+they cannot proceed; use `--fail-on-blocked-plan` alongside it to reject
+both conditions. Matching files and offline verification do not require
+transfer-size estimates. The JSON plan is still written even when either
+preflight condition fails.
+
 Inspect local files and estimate how much data remains to transfer:
 
 ```bash
