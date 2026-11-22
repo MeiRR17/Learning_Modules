@@ -595,12 +595,33 @@ def main(argv: list[str] | None = None) -> int:
                     "error": str(exc), "estimated_remaining_bytes": None,
                 }
 
-        planned_files = [
-            {
+        def planned_entry(
+            file_id: str, relative: Path, checksum: str | None, size: int | None
+        ) -> dict:
+            entry = {
                 "path": relative.as_posix(), "id": file_id,
                 "size": size, "sha256": checksum,
-                **(inspect_local(relative, checksum, size) if args.plan_inspect_local else {}),
             }
+            if not args.plan_inspect_local:
+                return entry
+            inspection = inspect_local(relative, checksum, size)
+            if inspection["planned_action"] == "blocked":
+                inspection["blocked_reason"] = {
+                    "unsafe": "unsafe_destination",
+                    "unsafe_partial": "unsafe_partial",
+                    "unreadable": "local_read_error",
+                    "oversized": "file_size_limit",
+                    "missing": "missing_for_verification",
+                    "invalid": (
+                        "invalid_for_verification" if args.verify_only
+                        else "existing_file_mismatch"
+                    ),
+                }.get(inspection["local_state"], "unavailable")
+            entry.update(inspection)
+            return entry
+
+        planned_files = [
+            planned_entry(file_id, relative, checksum, size)
             for file_id, relative, checksum, size in downloads
         ]
         plan = {
@@ -632,6 +653,15 @@ def main(argv: list[str] | None = None) -> int:
                 "blocked_or_invalid": sum(
                     item["planned_action"] == "blocked" for item in planned_files
                 ),
+                "blocked_reasons": {
+                    reason: sum(
+                        item.get("blocked_reason") == reason for item in planned_files
+                    )
+                    for reason in sorted({
+                        item["blocked_reason"] for item in planned_files
+                        if "blocked_reason" in item
+                    })
+                },
                 "estimated_remaining_bytes_known": sum(
                     value for value in estimates if value is not None
                 ),
