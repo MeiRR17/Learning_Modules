@@ -119,7 +119,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("manifest", type=Path, help="JSON file listing authorized downloads")
     parser.add_argument("--output", type=Path, default=Path("downloads"))
     parser.add_argument("--cookies", type=Path, help="Optional Netscape cookies.txt file")
-    parser.add_argument("--dry-run", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true",
+                      help="Preview destinations without downloading or verifying")
+    mode.add_argument("--verify-only", action="store_true",
+                      help="Audit local files without network access or downloading")
     parser.add_argument("--attempts", type=int, default=3)
     parser.add_argument("--retry-delay", type=float, default=2.0)
     parser.add_argument("--failed-manifest", type=Path)
@@ -144,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
 
     root = args.output.expanduser().resolve()
     cookies = args.cookies.expanduser().resolve() if args.cookies else None
-    if cookies and not cookies.is_file():
+    if cookies and not args.verify_only and not args.dry_run and not cookies.is_file():
         parser.error(f"Cookies file does not exist: {cookies}")
 
     if not downloads:
@@ -169,6 +173,18 @@ def main(argv: list[str] | None = None) -> int:
             continue
         if not destination_is_safe(destination, root):
             fail("Symlink destination refused.")
+            continue
+        if args.verify_only:
+            if not destination.is_file():
+                fail("Missing or non-regular local file.")
+            elif destination.stat().st_size == 0:
+                fail("Local file is empty.")
+            elif checksum and sha256_file(destination) != checksum:
+                fail("Local file SHA-256 mismatch.")
+            elif checksum:
+                print("  SHA-256 verified.")
+            else:
+                print("  File present; no checksum provided (integrity unverified).")
             continue
         if destination.is_file() and destination.stat().st_size > 0:
             if checksum is None or sha256_file(destination) == checksum:
@@ -222,7 +238,10 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"Retry manifest written: {report}")
 
-    print(f"Completed: {len(downloads) - failed}/{len(downloads)} entries successful or skipped.")
+    if args.verify_only:
+        print(f"Local verification completed: {len(downloads) - failed}/{len(downloads)} files present and acceptable.")
+    else:
+        print(f"Completed: {len(downloads) - failed}/{len(downloads)} entries successful or skipped.")
     return 1 if failed else 0
 
 
