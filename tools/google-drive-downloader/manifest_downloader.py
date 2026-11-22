@@ -155,6 +155,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Cap total yt-dlp subprocess attempts across the batch")
     parser.add_argument("--max-download-seconds", type=float, metavar="SECONDS",
                         help="Cap cumulative yt-dlp subprocess time across the batch")
+    parser.add_argument("--max-batch-wall-seconds", type=float, metavar="SECONDS",
+                        help="Cap total elapsed batch time, including retries and local work")
     parser.add_argument("--max-failures", type=int,
                         help="Stop the batch after N failed files (default: no limit)")
     parser.add_argument("--retry-delay", type=float, default=2.0)
@@ -337,6 +339,10 @@ def main(argv: list[str] | None = None) -> int:
         not math.isfinite(args.max_download_seconds) or args.max_download_seconds <= 0
     ):
         parser.error("--max-download-seconds must be finite and greater than zero")
+    if args.max_batch_wall_seconds is not None and (
+        not math.isfinite(args.max_batch_wall_seconds) or args.max_batch_wall_seconds <= 0
+    ):
+        parser.error("--max-batch-wall-seconds must be finite and greater than zero")
     if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
         parser.error("--timeout must be a finite number greater than zero")
     if args.min_free_space < 0:
@@ -906,8 +912,15 @@ def main(argv: list[str] | None = None) -> int:
     download_seconds_used = 0.0
     attempt_budget_stopped = False
     download_time_budget_stopped = False
+    wall_time_budget_stopped = False
     stop_reason = None
     outcomes = []
+    batch_started = time.monotonic()
+
+    def wall_remaining() -> float | None:
+        if args.max_batch_wall_seconds is None:
+            return None
+        return args.max_batch_wall_seconds - (time.monotonic() - batch_started)
     def unresolved_failure_count() -> int:
         return sum(len(items) for items in failed_entries.values())
 
@@ -986,6 +999,9 @@ def main(argv: list[str] | None = None) -> int:
             "attempt_budget_exhausted": attempt_budget_stopped,
             "max_download_seconds": args.max_download_seconds,
             "download_time_budget_exhausted": download_time_budget_stopped,
+            "max_batch_wall_seconds": args.max_batch_wall_seconds,
+            "batch_wall_seconds_elapsed": round(time.monotonic() - batch_started, 3),
+            "wall_time_budget_exhausted": wall_time_budget_stopped,
             "stop_reason": stop_reason,
             "unprocessed": len(downloads) - len(outcomes),
             "attempt_outcomes": {
@@ -1035,6 +1051,9 @@ def main(argv: list[str] | None = None) -> int:
             "max_download_seconds": args.max_download_seconds,
             "download_seconds_used": round(download_seconds_used, 3),
             "download_time_budget_exhausted": download_time_budget_stopped,
+            "max_batch_wall_seconds": args.max_batch_wall_seconds,
+            "batch_wall_seconds_elapsed": round(time.monotonic() - batch_started, 3),
+            "wall_time_budget_exhausted": wall_time_budget_stopped,
             "stop_reason": stop_reason,
             "matching_entries": total_matching,
             "has_more": start + len(outcomes) < total_matching,
@@ -1133,6 +1152,11 @@ def main(argv: list[str] | None = None) -> int:
                 download_time_budget_stopped = True
                 stop_reason = "max_download_seconds"
                 print("Stopping batch: downloader time budget exhausted.", file=sys.stderr)
+                break
+            if wall_remaining() is not None and wall_remaining() <= 0:
+                wall_time_budget_stopped = True
+                stop_reason = "max_batch_wall_seconds"
+                print("Stopping batch: wall-clock time budget exhausted.", file=sys.stderr)
                 break
             destination = root / relative
             outcome = {"path": relative.as_posix(), "status": "pending"}
@@ -1323,6 +1347,12 @@ def main(argv: list[str] | None = None) -> int:
                         download_time_budget_stopped = True
                         stop_reason = "max_download_seconds"
                         break
+                    if wall_remaining() is not None and wall_remaining() <= 0:
+                        failure = "Batch wall-clock time budget exhausted."
+                        outcome["retry_suppressed_reason"] = "max_batch_wall_seconds"
+                        wall_time_budget_stopped = True
+                        stop_reason = "max_batch_wall_seconds"
+                        break
                     # A failed attempt may have left a larger partial file.
                     # Reject that state even if the free-space reserve is off.
                     if part_path.is_symlink() or (
@@ -1371,11 +1401,12 @@ def main(argv: list[str] | None = None) -> int:
                         args.max_download_seconds - download_seconds_used
                         if args.max_download_seconds is not None else None
                     )
-                    effective_timeout = (
-                        min(args.timeout, remaining_budget)
-                        if args.timeout is not None and remaining_budget is not None
-                        else args.timeout if remaining_budget is None else remaining_budget
-                    )
+                    remaining_wall = wall_remaining()
+                    timeout_candidates = [
+                        value for value in (args.timeout, remaining_budget, remaining_wall)
+                        if value is not None
+                    ]
+                    effective_timeout = min(timeout_candidates) if timeout_candidates else None
                     attempt_started = time.monotonic()
                     attempt_record = {"attempt": attempt, "outcome": "launch_failed"}
                     if effective_timeout is not None:
@@ -1392,8 +1423,14 @@ def main(argv: list[str] | None = None) -> int:
                             remaining_budget is not None
                             and (args.timeout is None or remaining_budget <= args.timeout)
                         )
+                        wall_timeout = (
+                            remaining_wall is not None
+                            and (args.timeout is None or remaining_wall <= args.timeout)
+                            and (remaining_budget is None or remaining_wall <= remaining_budget)
+                        )
                         attempt_record["timeout_source"] = (
-                            "max_download_seconds" if batch_timeout else "timeout"
+                            "max_batch_wall_seconds" if wall_timeout
+                            else "max_download_seconds" if batch_timeout else "timeout"
                         )
                         failure = f"Download attempt timed out after {effective_timeout:g}s."
                         attempt_record["failure_reason"] = failure
@@ -1456,6 +1493,14 @@ def main(argv: list[str] | None = None) -> int:
                     # monotonic sum reaches the configured budget. Treat a
                     # batch-capped timeout as decisive rather than attempting
                     # another launch on a tiny apparent remainder.
+                    if attempt_record.get("timeout_source") == "max_batch_wall_seconds":
+                        if attempt < args.attempts:
+                            attempt_record["retry_suppressed_reason"] = "max_batch_wall_seconds"
+                            outcome["retry_suppressed_reason"] = "max_batch_wall_seconds"
+                        if attempt < args.attempts or index < len(downloads):
+                            wall_time_budget_stopped = True
+                            stop_reason = "max_batch_wall_seconds"
+                        break
                     if attempt_record.get("timeout_source") == "max_download_seconds":
                         if attempt < args.attempts:
                             attempt_record["retry_suppressed_reason"] = "max_download_seconds"
@@ -1488,7 +1533,20 @@ def main(argv: list[str] | None = None) -> int:
                             download_time_budget_stopped = True
                             stop_reason = "max_download_seconds"
                             break
+                        if wall_remaining() is not None and wall_remaining() <= 0:
+                            attempt_record["retry_suppressed_reason"] = "max_batch_wall_seconds"
+                            outcome["retry_suppressed_reason"] = "max_batch_wall_seconds"
+                            wall_time_budget_stopped = True
+                            stop_reason = "max_batch_wall_seconds"
+                            break
                         delay = min(args.retry_delay * (2 ** (attempt - 1)), 60.0)
+                        remaining_wall = wall_remaining()
+                        if remaining_wall is not None and delay >= remaining_wall:
+                            attempt_record["retry_suppressed_reason"] = "max_batch_wall_seconds"
+                            outcome["retry_suppressed_reason"] = "max_batch_wall_seconds"
+                            wall_time_budget_stopped = True
+                            stop_reason = "max_batch_wall_seconds"
+                            break
                         attempt_record["retry_delay_seconds"] = delay
                         print(f"  Retry {attempt + 1}/{args.attempts} in {delay:g}s.", flush=True)
                         time.sleep(delay)
@@ -1506,6 +1564,7 @@ def main(argv: list[str] | None = None) -> int:
                 # are reached after the same file; no more retry was denied.
                 if index < len(downloads) and not (
                     attempt_budget_stopped or download_time_budget_stopped
+                    or wall_time_budget_stopped
                 ):
                     if args.max_failures is not None and failed >= args.max_failures:
                         stop_reason = "max_failures"
@@ -1521,6 +1580,9 @@ def main(argv: list[str] | None = None) -> int:
                     ):
                         download_time_budget_stopped = True
                         stop_reason = "max_download_seconds"
+                    elif wall_remaining() is not None and wall_remaining() <= 0:
+                        wall_time_budget_stopped = True
+                        stop_reason = "max_batch_wall_seconds"
                 # Run recovery even if a filesystem exception interrupted the
                 # download path after quarantine succeeded.
                 if outcome["status"] == "failed":
