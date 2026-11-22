@@ -24,6 +24,7 @@ import sys
 import tempfile
 import time
 import unicodedata
+import uuid
 from pathlib import Path, PurePosixPath
 from typing import Iterator
 
@@ -161,6 +162,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Limit yt-dlp transfer rate per download (default: unlimited)")
     parser.add_argument("--max-file-size", type=int, metavar="BYTES",
                         help="Refuse files larger than this byte limit")
+    parser.add_argument("--quarantine-invalid", action="store_true",
+                        help="Move invalid existing files aside before redownloading")
     parser.add_argument("--failed-manifest", type=Path)
     parser.add_argument("--retain-failures", action="store_true",
                         help="Carry forward unresolved entries from an existing failed manifest")
@@ -608,8 +611,19 @@ def main(argv: list[str] | None = None) -> int:
                         outcome["status"] = "skipped"
                         print("  Already exists; skipped.")
                         continue
-                    fail("Existing file size or checksum mismatch; refusing overwrite.")
-                    continue
+                    if not args.quarantine_invalid:
+                        fail("Existing file size or checksum mismatch; refusing overwrite.")
+                        continue
+                    # Preserve invalid data instead of deleting or replacing it.
+                    # The backup stays beside the original in the same filesystem.
+                    backup = destination.with_name(
+                        f"{destination.name}.invalid-{uuid.uuid4().hex}"
+                    )
+                    if backup.exists() or backup.is_symlink():
+                        fail("Quarantine destination already exists.")
+                        continue
+                    destination.rename(backup)
+                    print(f"  Invalid file quarantined: {backup}", flush=True)
                 if destination.exists() and not destination.is_file():
                     fail("Destination is not a regular file; skipped.")
                     continue
