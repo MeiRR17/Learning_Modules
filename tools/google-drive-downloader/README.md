@@ -361,7 +361,14 @@ an oversized partial, checking again before each retry even when
 truncated; inspect or move it manually before retrying. A stale partial
 associated with an invalid completed file is instead moved to quarantine
 when `--quarantine-invalid` is enabled, allowing a clean replacement.
-The size check only applies when a final size is declared.
+The expected-size comparison applies when a final size is declared.
+Independently, an existing `.part` larger than `--max-file-size` is
+rejected even if the manifest has no `size`. Local-aware plans use
+`partial_size_mismatch` when the declared final size is exceeded and
+`partial_file_size_limit` when the configured maximum is exceeded.
+When both restrictions are exceeded, the declared-size mismatch takes
+precedence. Both guards are enforced before the transfer and before
+each retry, without deleting the partial data.
 
 Diagnose blocked entries using stable reason codes in the local-aware plan:
 
@@ -381,7 +388,7 @@ When `--plan-inspect-local` is enabled, each entry whose
 `planned_action` is `blocked` includes a `blocked_reason`. The
 summary's `blocked_reasons` object counts files by reason. Reason codes
 are `unsafe_destination`, `unsafe_partial`, `local_read_error`,
-`file_size_limit`, `partial_size_mismatch`, `missing_for_verification`, `empty_file`,
+`file_size_limit`, `partial_size_mismatch`, `partial_file_size_limit`, `missing_for_verification`, `empty_file`,
 `size_mismatch`, `checksum_mismatch`, and `unavailable` (fallback).
 An `invalid` local file now reports the specific available integrity
 issue instead of a generic verification or mismatch reason. The
