@@ -595,18 +595,13 @@ def main(argv: list[str] | None = None) -> int:
                     fail("Destination is not a regular file; skipped.")
                     continue
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                if args.min_free_space:
-                    free_bytes = shutil.disk_usage(destination.parent).free
-                    # Expected size is a conservative preflight estimate for
-                    # new files. Unknown-size downloads only check the reserve.
-                    required = args.min_free_space + (size or 0)
-                    if free_bytes < required:
-                        fail(
-                            "Insufficient free disk space: "
-                            f"{free_bytes} bytes available, {required} required "
-                            "(reserve plus expected file size)."
-                        )
-                        continue
+                part_path = destination.with_name(destination.name + ".part")
+                if part_path.is_symlink():
+                    fail("Symlinked partial download refused.")
+                    continue
+                if part_path.exists() and not part_path.is_file():
+                    fail("Partial download path is not a regular file.")
+                    continue
                 command = [
                     sys.executable, "-m", "yt_dlp",
                     "--continue",
@@ -619,6 +614,27 @@ def main(argv: list[str] | None = None) -> int:
                 command.append(f"https://drive.google.com/file/d/{file_id}/view")
                 failure = None
                 for attempt in range(1, args.attempts + 1):
+                    if args.min_free_space:
+                        # yt-dlp uses a .part file for resumed downloads. Count
+                        # only bytes already stored in that file; recheck space
+                        # before every retry, not just the first attempt.
+                        if part_path.is_symlink():
+                            failure = "Symlinked partial download refused."
+                            break
+                        if part_path.exists() and not part_path.is_file():
+                            failure = "Partial download path is not a regular file."
+                            break
+                        partial_bytes = part_path.stat().st_size if part_path.is_file() else 0
+                        remaining_bytes = max(size - partial_bytes, 0) if size is not None else 0
+                        required = args.min_free_space + remaining_bytes
+                        free_bytes = shutil.disk_usage(destination.parent).free
+                        if free_bytes < required:
+                            failure = (
+                                "Insufficient free disk space: "
+                                f"{free_bytes} bytes available, {required} required "
+                                "(reserve plus estimated remaining bytes)."
+                            )
+                            break
                     result = None
                     try:
                         result = subprocess.run(
