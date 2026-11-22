@@ -78,7 +78,19 @@ Exclusions are applied after folder inclusion but before `--offset`,
 `--after`, `--cursor-in`, and `--limit`. Thus pagination counts only
 files that remain eligible. Checkpoints record `excluded_folders` and
 reject resume attempts where `--exclude-folder` differs from the original
-run. Older checkpoints lacking this field imply no exclusions. All manifest
+run. Older checkpoints lacking this field imply no exclusions. Use repeatable
+`--exclude-file` for an exact target instead of excluding a whole subtree:
+
+```bash
+python manifest_downloader.py manifest.json --folder "Course" \
+  --exclude-file "Course/Week 1/lecture.mp4" --limit 20 \
+  --cursor-out checkpoint.json
+```
+
+The file path must exist in the manifest, and must match the complete
+relative destination. Checkpoints also record `excluded_files` and require
+the same file exclusions when resuming with `--cursor-in`. Older checkpoints
+without `excluded_files` are treated as having no excluded files. All manifest
 entries are still validated and protected against output/report collisions,
 including excluded files.
 Use `--offset` together with `--limit` to page through matching entries
