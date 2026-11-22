@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -131,6 +132,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-failures", type=int,
                         help="Stop the batch after N failed files (default: no limit)")
     parser.add_argument("--retry-delay", type=float, default=2.0)
+    parser.add_argument("--timeout", type=float,
+                        help="Maximum seconds per yt-dlp attempt (default: unlimited)")
     parser.add_argument("--failed-manifest", type=Path)
     parser.add_argument("--status-out", type=Path,
                         help="Write a JSON report of individual file outcomes")
@@ -192,8 +195,10 @@ def main(argv: list[str] | None = None) -> int:
             resume_after = relative_destination(checkpoint["after"], allow_subdirs=True)
         except (KeyError, TypeError, ValueError) as exc:
             parser.error(f"Invalid checkpoint cursor: {exc}")
-    if args.attempts < 1 or not 0 <= args.retry_delay <= 3600:
+    if args.attempts < 1 or not math.isfinite(args.retry_delay) or not 0 <= args.retry_delay <= 3600:
         parser.error("Require --attempts >= 1 and 0 <= --retry-delay <= 3600")
+    if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
+        parser.error("--timeout must be a finite number greater than zero")
 
     try:
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
@@ -367,22 +372,28 @@ def main(argv: list[str] | None = None) -> int:
             command.append(f"https://drive.google.com/file/d/{file_id}/view")
             failure = None
             for attempt in range(1, args.attempts + 1):
+                result = None
                 try:
-                    result = subprocess.run(command, check=False)
+                    result = subprocess.run(
+                        command, check=False, timeout=args.timeout,
+                    )
+                except subprocess.TimeoutExpired:
+                    failure = f"Download attempt timed out after {args.timeout:g}s."
                 except OSError as exc:
                     failure = f"Could not launch downloader: {exc}"
                     break
-                if result.returncode == 0:
-                    if not destination.is_file() or destination.stat().st_size == 0:
-                        failure = "Downloader succeeded but output file is missing or empty."
-                    elif size is not None and destination.stat().st_size != size:
-                        failure = f"Downloaded file size mismatch (expected {size} bytes)."
-                    elif checksum and sha256_file(destination) != checksum:
-                        failure = "Downloaded file SHA-256 mismatch."
-                    else:
-                        failure = None
-                    break
-                failure = f"Download failed (exit {result.returncode})."
+                if result is not None:
+                    if result.returncode == 0:
+                        if not destination.is_file() or destination.stat().st_size == 0:
+                            failure = "Downloader succeeded but output file is missing or empty."
+                        elif size is not None and destination.stat().st_size != size:
+                            failure = f"Downloaded file size mismatch (expected {size} bytes)."
+                        elif checksum and sha256_file(destination) != checksum:
+                            failure = "Downloaded file SHA-256 mismatch."
+                        else:
+                            failure = None
+                        break
+                    failure = f"Download failed (exit {result.returncode})."
                 if attempt < args.attempts:
                     delay = min(args.retry_delay * (2 ** (attempt - 1)), 60.0)
                     print(f"  Retry {attempt + 1}/{args.attempts} in {delay:g}s.", flush=True)
