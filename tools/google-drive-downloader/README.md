@@ -345,6 +345,24 @@ Blocked files are not included in the transfer estimate; pair this
 with `--fail-on-blocked-plan` to reject those as well. The estimate is
 a planning value, not a hard runtime network-transfer cap.
 
+Oversized partial downloads are refused rather than resumed:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --dry-run --plan-out batch-plan.json --plan-inspect-local \
+  --fail-on-blocked-plan
+```
+
+If a local `.part` file exceeds its manifest-declared final `size`,
+the planner marks it as `blocked` with reason
+`partial_size_mismatch`. Normal download mode also refuses to resume
+an oversized partial, checking again before each retry even when
+`--min-free-space` is not set. The partial file is not deleted or
+truncated; inspect or move it manually before retrying. A stale partial
+associated with an invalid completed file is instead moved to quarantine
+when `--quarantine-invalid` is enabled, allowing a clean replacement.
+The size check only applies when a final size is declared.
+
 Diagnose blocked entries using stable reason codes in the local-aware plan:
 
 ```json
@@ -363,7 +381,7 @@ When `--plan-inspect-local` is enabled, each entry whose
 `planned_action` is `blocked` includes a `blocked_reason`. The
 summary's `blocked_reasons` object counts files by reason. Reason codes
 are `unsafe_destination`, `unsafe_partial`, `local_read_error`,
-`file_size_limit`, `missing_for_verification`, `empty_file`,
+`file_size_limit`, `partial_size_mismatch`, `missing_for_verification`, `empty_file`,
 `size_mismatch`, `checksum_mismatch`, and `unavailable` (fallback).
 An `invalid` local file now reports the specific available integrity
 issue instead of a generic verification or mismatch reason. The
