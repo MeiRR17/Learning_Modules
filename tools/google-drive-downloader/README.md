@@ -431,7 +431,9 @@ only after checking any declared size and SHA-256; the
 `integrity_verified` field is true only when a checksum was verified.
 When `--verify-only` is enabled, a local-aware plan uses `verify` for
 files that satisfy the available checks and `blocked` for missing,
-unreadable, or invalid files. It never proposes downloads, resuming a
+unreadable, or invalid files. A manifest-declared file size greater than
+`--max-file-size` is always blocked with `file_size_limit`, even if a
+smaller local file exists; this matches the runtime preflight policy. It never proposes downloads, resuming a
 partial transfer, or quarantining in verification mode. The plan's `mode`
 field identifies `verify-only`, `dry-run`, or `download`; the
 `local_inspection.actions` summary includes a `verify` count. A successful
