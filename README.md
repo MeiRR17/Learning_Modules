@@ -6,7 +6,7 @@ This repository is the **single entry point for reusable programming lessons and
 
 | Track | Current material | Destination in future hub |
 |---|---|---|
-| REST APIs | [REST API Complete Tutorial](REST_API_Complete_Tutorial.md), [FastAPI tutorial (imported)](tracks/backend/fastapi/) | `tracks/backend/fastapi/` |
+| REST APIs | [REST API Complete Tutorial](REST_API_Complete_Tutorial.md), [local REST contract lab](tracks/backend/rest-contracts/), [FastAPI tutorial (imported)](tracks/backend/fastapi/) | `tracks/backend/` |
 | Containers | [Docker complete guide](docker-complete-guide-hebrew.md) | `tracks/devops/docker/` |
 | Java exercises | [Java anagram example (imported)](tracks/languages/java/) | `tracks/languages/java/` |
 | C and algorithms | [C Sudoku example (imported)](tracks/languages/c/sudoku/) | `tracks/languages/c/algorithms/` |
