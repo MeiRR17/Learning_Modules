@@ -179,8 +179,12 @@ When a selection is empty (for example, a cursor already past the final
 file), the command does not invoke yt-dlp. If report paths were supplied,
 it replaces the retry manifest with `{}`, writes a zero-entry status report,
 and writes a checkpoint with `has_more: false`. An existing input cursor is
-carried forward into the output checkpoint; with no prior cursor the `after`
-field is `null` and there is no file to resume after. No reports are
+carried forward into the output checkpoint; if the offset has passed the
+last eligible file, that file becomes the checkpoint cursor. Only a manifest
+selection with zero matching entries produces `after: null`. Such a
+checkpoint can be supplied to `--cursor-in` again without an error and
+will remain complete as long as the manifest and filters are unchanged.
+No reports are
 written for an empty `--dry-run`. As with nonempty batches, using the same
 report paths replaces their prior contents.
 
