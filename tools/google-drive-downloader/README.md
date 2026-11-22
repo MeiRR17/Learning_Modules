@@ -31,11 +31,15 @@ python manifest_downloader.py manifest.json --output downloads \
 `--min-free-space` accepts a nonnegative byte count; the example reserves
 10 GiB. Before invoking yt-dlp for each new file, the downloader checks
 the destination filesystem's free bytes. If the manifest provides a
-`size`, it requires enough free space for that file **plus** the reserve;
-otherwise only the reserve can be checked before downloading. Insufficient
-space is recorded as a per-file failure and can be retried later. This is a
-preflight safeguard, not a guarantee: concurrent processes can consume
-space during downloads, and yt-dlp may use temporary files.
+`size`, it requires enough free space for the **estimated remaining**
+bytes plus the reserve. For an interrupted transfer with an existing regular
+`.part` file, the downloader subtracts the bytes already present in that
+partial file from the expected size. If no expected size is provided, only
+the reserve can be checked before downloading. The check runs before **each
+retry**, and a symlinked or non-regular partial-download path is rejected.
+Insufficient space is recorded as a per-file failure and can be retried later.
+This is a preflight safeguard, not a guarantee: concurrent processes can
+consume space during downloads, and yt-dlp may use other temporary files.
 
 For integrity-sensitive archives, require SHA-256 checksums on every selected
 file:
