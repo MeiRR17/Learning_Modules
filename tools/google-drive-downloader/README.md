@@ -704,6 +704,18 @@ files. Backoff delays, hashing, and other filesystem operations are
 not included in the elapsed figure. Files skipped or rejected before
 the download loop omit these per-file fields.
 
+Successful file outcomes (`downloaded`, `skipped`, `verified`,
+`size-checked`, and `present`) include `output_bytes` for the size
+of the local output and `integrity_verified`, a boolean indicating
+whether its SHA-256 checksum was actually checked against the manifest.
+A size-only match or mere file presence is **not** cryptographic integrity
+verification. The report-level `successful_output_bytes` is the sum
+of these output sizes, and `sha256_verified_files` counts successful
+outcomes that passed checksum verification. These are sizes of completed
+local outputs, not a measurement of downloaded network bytes; skipped
+files contribute to the total. Failed and unprocessed entries are
+excluded.
+
 The status report does not include Google Drive IDs or cookies. The report
 is atomically updated after each selected file, including failures; it is not
 produced in dry-run mode. If interrupted, the report preserves outcomes written
