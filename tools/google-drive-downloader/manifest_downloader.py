@@ -960,6 +960,12 @@ def main(argv: list[str] | None = None) -> int:
                 item.get("status") == "downloaded" and "quarantined_backup" in item
                 for item in outcomes
             ),
+            "successful_output_bytes": sum(
+                item.get("output_bytes", 0) for item in outcomes
+            ),
+            "sha256_verified_files": sum(
+                item.get("integrity_verified") is True for item in outcomes
+            ),
             "download_attempts": sum(item.get("download_attempts", 0) for item in outcomes),
             "attempt_outcomes": {
                 status: sum(
@@ -1133,6 +1139,9 @@ def main(argv: list[str] | None = None) -> int:
                     else:
                         outcome["status"] = "present"
                         print("  File present; no checksum provided (integrity unverified).")
+                    if outcome["status"] != "failed":
+                        outcome["output_bytes"] = destination.stat().st_size
+                        outcome["integrity_verified"] = bool(checksum)
                     continue
                 if destination.is_file() and destination.stat().st_size > 0:
                     if args.max_file_size is not None and destination.stat().st_size > args.max_file_size:
@@ -1142,6 +1151,8 @@ def main(argv: list[str] | None = None) -> int:
                         checksum is None or sha256_file(destination) == checksum
                     ):
                         outcome["status"] = "skipped"
+                        outcome["output_bytes"] = destination.stat().st_size
+                        outcome["integrity_verified"] = bool(checksum)
                         print("  Already exists; skipped.")
                         continue
                     if not args.quarantine_invalid:
@@ -1343,6 +1354,8 @@ def main(argv: list[str] | None = None) -> int:
                     fail(failure)
                 else:
                     outcome["status"] = "downloaded"
+                    outcome["output_bytes"] = destination.stat().st_size
+                    outcome["integrity_verified"] = bool(checksum)
             except OSError as exc:
                 fail(f"File operation failed: {exc}")
             finally:
