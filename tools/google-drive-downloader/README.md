@@ -283,7 +283,10 @@ python manifest_downloader.py manifest.json --output downloads \
 report, in the original manifest's order. As each selected file succeeds,
 its entry is removed from the retained failure report; unsuccessful entries
 remain. A failure referring to a file no longer in the original manifest is
-rejected instead of silently ignored. Folder selection and exclusions still
+rejected instead of silently ignored. Each retained failure must also
+match the original manifest's Drive file ID, optional SHA-256 digest, and
+optional expected byte size; mismatches require an explicit correction of
+the retry record or a fresh retry manifest before using `--only-failed`. Folder selection and exclusions still
 apply, and `--limit` allows bounded retry batches. Run the command again
 to attempt remaining failures. Because the eligible selection changes as
 files are resolved, `--only-failed` cannot be combined with `--offset`,
