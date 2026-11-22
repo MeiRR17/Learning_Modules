@@ -29,7 +29,11 @@ characters (`< > : " / \\ | ? *` where `/` is only a folder separator),
 and Windows-reserved names such as `CON`, `NUL`, `COM1`, and `LPT1`
 are rejected, including names with extensions (for example `CON.txt`).
 Output roots that are themselves symbolic links are also rejected; existing
-symlinked paths inside the output directory remain prohibited.
+symlinked paths inside the output directory remain prohibited. The manifest
+also rejects duplicate destinations after Unicode NFC normalization and
+case folding, and refuses file/directory conflicts (for example, a file
+named `Week1` alongside the folder `Week1/`). These checks protect against
+filesystem naming differences across macOS, Windows, and Linux.
 
 Preview the destinations:
 
