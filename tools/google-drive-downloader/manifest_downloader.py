@@ -269,6 +269,14 @@ def main(argv: list[str] | None = None) -> int:
     failed = 0
     failed_entries = {}
     outcomes = []
+    if args.failed_manifest and not args.dry_run:
+        # Clear stale results at the start of a new selected batch.
+        try:
+            write_retry_manifest(args.failed_manifest.expanduser(), failed_entries)
+        except (OSError, ValueError) as exc:
+            print(f"Failed to initialize retry manifest: {exc}", file=sys.stderr)
+            return 1
+
     def publish_status() -> None:
         if not args.status_out or args.dry_run:
             return
@@ -384,19 +392,17 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 outcome["status"] = "downloaded"
         finally:
+            # Persist the retry list before the less-critical status summary.
+            # A process interrupted later can still retry all known failures.
+            if args.failed_manifest and not args.dry_run:
+                write_retry_manifest(args.failed_manifest.expanduser(), failed_entries)
             publish_status()
 
     if args.status_out and not args.dry_run:
         print(f"Status report written: {args.status_out}")
 
     if args.failed_manifest and not args.dry_run:
-        report = args.failed_manifest.expanduser()
-        try:
-            write_retry_manifest(report, failed_entries)
-        except (OSError, ValueError) as exc:
-            print(f"Failed to write retry manifest: {exc}", file=sys.stderr)
-            return 1
-        print(f"Retry manifest written: {report}")
+        print(f"Retry manifest written: {args.failed_manifest}")
 
     if args.cursor_out and not args.dry_run:
         checkpoint = {
