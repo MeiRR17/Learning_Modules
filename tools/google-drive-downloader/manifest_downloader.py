@@ -181,6 +181,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Inspect local destinations and partial files in --plan-out")
     parser.add_argument("--fail-on-missing-checksum-plan", action="store_true",
                         help="In dry-run, reject selected files without SHA-256 metadata")
+    parser.add_argument("--fail-on-unverified-local-plan", action="store_true",
+                        help="In dry-run, reject local skip/verify actions without SHA-256 validation")
     parser.add_argument("--fail-on-blocked-plan", action="store_true",
                         help="In dry-run, exit nonzero if the inspected plan contains blocked files")
     parser.add_argument("--fail-on-quarantine-plan", action="store_true",
@@ -223,6 +225,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--plan-inspect-local requires --plan-out")
     if args.fail_on_missing_checksum_plan and not (args.plan_out and args.dry_run):
         parser.error("--fail-on-missing-checksum-plan requires --plan-out and --dry-run")
+    if args.fail_on_unverified_local_plan and not (args.plan_inspect_local and args.dry_run):
+        parser.error("--fail-on-unverified-local-plan requires --plan-inspect-local and --dry-run")
     if args.fail_on_blocked_plan and not (args.plan_inspect_local and args.dry_run):
         parser.error("--fail-on-blocked-plan requires --plan-inspect-local and --dry-run")
     if args.fail_on_unknown_size_plan and not (args.plan_inspect_local and args.dry_run):
@@ -704,6 +708,11 @@ def main(argv: list[str] | None = None) -> int:
                     for action in ("download", "resume", "quarantine_and_download")
                 ),
                 "matching": sum(item["local_state"] == "matching" for item in planned_files),
+                "unverified_local_count": sum(
+                    item["planned_action"] in ("skip", "verify")
+                    and not item.get("integrity_verified", False)
+                    for item in planned_files
+                ),
                 "partial": sum(item["local_state"] == "partial" for item in planned_files),
                 "quarantine_bytes": sum(
                     item.get("quarantine_bytes", 0) for item in planned_files
@@ -742,6 +751,14 @@ def main(argv: list[str] | None = None) -> int:
             blocked = inspection["blocked_or_invalid"]
             unknown = inspection["unknown_estimate_count"]
             estimate = inspection["estimated_remaining_bytes_known"]
+            if args.fail_on_unverified_local_plan:
+                unverified = inspection["unverified_local_count"]
+                checks.append({
+                    "code": "unverified_local_files",
+                    "passed": unverified == 0,
+                    "observed": unverified,
+                    "limit": 0,
+                })
             if args.fail_on_blocked_plan:
                 checks.append({
                     "code": "blocked_files",
