@@ -157,6 +157,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Maximum seconds per yt-dlp attempt (default: unlimited)")
     parser.add_argument("--min-free-space", type=int, default=0, metavar="BYTES",
                         help="Reserve this many free bytes in the download filesystem")
+    parser.add_argument("--rate-limit", type=int, metavar="BYTES_PER_SECOND",
+                        help="Limit yt-dlp transfer rate per download (default: unlimited)")
     parser.add_argument("--failed-manifest", type=Path)
     parser.add_argument("--retain-failures", action="store_true",
                         help="Carry forward unresolved entries from an existing failed manifest")
@@ -267,6 +269,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--timeout must be a finite number greater than zero")
     if args.min_free_space < 0:
         parser.error("--min-free-space must be zero or greater")
+    if args.rate_limit is not None and args.rate_limit < 1:
+        parser.error("--rate-limit must be a positive integer of bytes per second")
 
     failed_entries = {}
     if args.retain_failures and args.failed_manifest:
@@ -611,6 +615,8 @@ def main(argv: list[str] | None = None) -> int:
                 ]
                 if cookies:
                     command.extend(["--cookies", str(cookies)])
+                if args.rate_limit is not None:
+                    command.extend(["--limit-rate", str(args.rate_limit)])
                 command.append(f"https://drive.google.com/file/d/{file_id}/view")
                 failure = None
                 for attempt in range(1, args.attempts + 1):
