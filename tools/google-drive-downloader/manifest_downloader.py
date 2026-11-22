@@ -166,6 +166,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Reject selected batches whose declared file sizes exceed this total")
     parser.add_argument("--quarantine-invalid", action="store_true",
                         help="Move invalid existing files aside before redownloading")
+    parser.add_argument("--restore-quarantine-on-failure", action="store_true",
+                        help="Restore quarantined originals after failed replacement when paths are free")
     parser.add_argument("--failed-manifest", type=Path)
     parser.add_argument("--retain-failures", action="store_true",
                         help="Carry forward unresolved entries from an existing failed manifest")
@@ -215,6 +217,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.retain_failures and not args.failed_manifest:
         parser.error("--retain-failures requires --failed-manifest")
+    if args.restore_quarantine_on_failure and not args.quarantine_invalid:
+        parser.error("--restore-quarantine-on-failure requires --quarantine-invalid")
     if args.plan_inspect_local and not args.plan_out:
         parser.error("--plan-inspect-local requires --plan-out")
     if args.fail_on_missing_checksum_plan and not (args.plan_out and args.dry_run):
@@ -1149,6 +1153,35 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"  Retry {attempt + 1}/{args.attempts} in {delay:g}s.", flush=True)
                         time.sleep(delay)
                 if failure:
+                    if args.restore_quarantine_on_failure and "quarantined_backup" in outcome:
+                        original_backup = root / outcome["quarantined_backup"]
+                        partial_backup = (
+                            root / outcome["quarantined_partial_backup"]
+                            if "quarantined_partial_backup" in outcome else None
+                        )
+                        # Never replace a new completed file or partial output.
+                        # If either exists, retain the original backups.
+                        if destination.exists() or destination.is_symlink() or (
+                            part_path.exists() or part_path.is_symlink()
+                        ):
+                            outcome["quarantine_restore"] = "deferred_outputs_present"
+                        else:
+                            try:
+                                original_backup.rename(destination)
+                                outcome["quarantine_restore"] = "original_restored"
+                                outcome.pop("quarantined_backup", None)
+                                if partial_backup is not None:
+                                    try:
+                                        partial_backup.rename(part_path)
+                                    except OSError as restore_exc:
+                                        outcome["quarantine_restore"] = "partial_restore_failed"
+                                        outcome["quarantine_restore_error"] = str(restore_exc)
+                                    else:
+                                        outcome["quarantine_restore"] = "restored"
+                                        outcome.pop("quarantined_partial_backup", None)
+                            except OSError as restore_exc:
+                                outcome["quarantine_restore"] = "original_restore_failed"
+                                outcome["quarantine_restore_error"] = str(restore_exc)
                     fail(failure)
                 else:
                     outcome["status"] = "downloaded"
