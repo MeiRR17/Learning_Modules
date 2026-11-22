@@ -677,6 +677,28 @@ python manifest_downloader.py manifest.json --output downloads \
 and `selected`. Download runs use `downloaded` or `skipped` for successful
 files; offline verification uses `verified`, `size-checked`, or `present`
 depending on the available integrity metadata. Errors appear as `failed`.
+Cap the number of actual yt-dlp subprocess attempts across a batch:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --attempts 3 --max-total-attempts 20 \
+  --status-out status.json --cursor-out progress.json
+```
+
+`--max-total-attempts` accepts a positive integer and limits total yt-dlp
+subprocess invocations in the current run, including retries, failed
+launches, and timeouts. `--attempts` still limits retries **per file**;
+the batch-wide budget is independent. Once the budget is spent, the
+downloader stops scheduling retries and does not select another file.
+Skipped or already verified files do not consume the budget. A
+`--status-out` report includes `max_total_attempts` and
+`attempt_budget_exhausted` in addition to `download_attempts`.
+Incomplete batches caused by the limit exit nonzero. The regular
+`--cursor-out` checkpoint still advances only through processed files,
+so a subsequent run can resume remaining entries with a fresh budget.
+This is an invocation-count limit, not a network bandwidth or elapsed-time
+limit.
+
 Download attempt telemetry is included in `--status-out`. For each
 file that reaches the yt-dlp download loop, `download_attempts` counts
 subprocess invocations (including timed-out or failed launches),
