@@ -703,7 +703,11 @@ when the subprocess budget stops processing, or `null` when neither
 limit stops the batch. The checkpoint also records `stop_reason`.
 If both limits are reached after the same file, the failed-file
 threshold takes precedence unless the attempt budget actually prevented
-a retry. The `--cursor-out` checkpoint
+a retry. If the batch-wide limit suppresses a retry after an actual
+download failure, the file outcome and its last attempt-history record
+include `retry_suppressed_reason: "max_total_attempts"`. The original
+timeout or downloader exit failure remains available in `failure_reason`
+and the file's `reason`, rather than being overwritten by the stop policy. The `--cursor-out` checkpoint
 also stores `download_attempts`, `max_total_attempts`, and
 `attempt_budget_exhausted` for auditing a stopped batch. Incomplete
 batches caused by the limit exit nonzero. The checkpoint still advances
