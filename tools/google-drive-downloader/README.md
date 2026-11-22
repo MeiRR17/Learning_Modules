@@ -124,8 +124,14 @@ succeeds. In `--status-out`, the `quarantine_restore` value is
 `original_restore_failed`, or `partial_restore_failed`. When a move
 fails, `quarantine_restore_error` records the filesystem error.
 Remaining `quarantined_backup` and `quarantined_partial_backup`
-paths indicate backups that still need attention. This option does not
-overwrite new output or remove partial data to force a rollback.
+paths indicate backups that still need attention. Restoration uses exclusive
+hard-link creation to install the original file without overwriting a path
+created by another process between the initial check and the restore. The
+backup is removed only after the destination link exists; if creating the
+link or removing the backup fails, the operation records a restore error and
+may leave both paths for manual review. The restore requires same-filesystem
+hard-link support. This option does not overwrite new output or remove
+partial data to force a rollback.
 
 Recover from mismatched existing downloads without deleting the originals:
 
