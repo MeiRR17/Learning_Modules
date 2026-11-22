@@ -219,6 +219,31 @@ Blocked files are not included in the transfer estimate; pair this
 with `--fail-on-blocked-plan` to reject those as well. The estimate is
 a planning value, not a hard runtime network-transfer cap.
 
+Read preflight policy results directly from the exported JSON plan:
+
+```json
+{
+  "preflight": {
+    "passed": false,
+    "checks": [
+      {"code": "blocked_files", "passed": false, "observed": 2, "limit": 0},
+      {"code": "unknown_transfer_size", "passed": true, "observed": 0, "limit": 0}
+    ],
+    "failed_codes": ["blocked_files"]
+  }
+}
+```
+
+The `preflight` object is included whenever `--plan-out` is used.
+Its `passed` field is true only if every **enabled** preflight
+policy passes. `checks` is empty when no preflight policy was
+enabled; that means no policy was evaluated, not that all files are safe.
+Supported check codes are `blocked_files`, `unknown_transfer_size`,
+`transfer_size_known`, and `estimated_transfer_budget`.
+Each check exposes the observed count or byte estimate and its limit.
+The plan is written before a failing preflight exits nonzero, so
+automation can examine `failed_codes` directly.
+
 Inspect local files and estimate how much data remains to transfer:
 
 ```bash
