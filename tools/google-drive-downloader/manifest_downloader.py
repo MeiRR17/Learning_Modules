@@ -18,6 +18,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path, PurePosixPath
 from typing import Iterator
 
@@ -92,7 +93,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, default=Path("downloads"))
     parser.add_argument("--cookies", type=Path, help="Optional Netscape cookies.txt file")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--attempts", type=int, default=3)
+    parser.add_argument("--retry-delay", type=float, default=2.0)
+    parser.add_argument("--failed-manifest", type=Path)
     args = parser.parse_args(argv)
+    if args.attempts < 1 or not 0 <= args.retry_delay <= 3600:
+        parser.error("Require --attempts >= 1 and 0 <= --retry-delay <= 3600")
 
     try:
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
@@ -110,25 +116,32 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     failed = 0
+    failed_entries = {}
     for index, (file_id, relative, checksum) in enumerate(downloads, start=1):
         destination = root / relative
         print(f"[{index}/{len(downloads)}] {relative}", flush=True)
+        def fail(reason):
+            nonlocal failed
+            failed += 1
+            item = {"id": file_id, "name": relative.name}
+            if checksum:
+                item["sha256"] = checksum
+            failed_entries.setdefault(relative.parent.as_posix(), []).append(item)
+            print(f"  {reason}", file=sys.stderr)
+
         if args.dry_run:
             continue
         if not destination_is_safe(destination, root):
-            print("  Symlink destination refused.", file=sys.stderr)
-            failed += 1
+            fail("Symlink destination refused.")
             continue
         if destination.is_file() and destination.stat().st_size > 0:
             if checksum is None or sha256_file(destination) == checksum:
                 print("  Already exists; skipped.")
                 continue
-            print("  Existing file checksum mismatch; refusing overwrite.", file=sys.stderr)
-            failed += 1
+            fail("Existing file checksum mismatch; refusing overwrite.")
             continue
         if destination.exists() and not destination.is_file():
-            print("  Destination is not a regular file; skipped.", file=sys.stderr)
-            failed += 1
+            fail("Destination is not a regular file; skipped.")
             continue
         destination.parent.mkdir(parents=True, exist_ok=True)
         command = [
@@ -141,17 +154,39 @@ def main(argv: list[str] | None = None) -> int:
         if cookies:
             command.extend(["--cookies", str(cookies)])
         command.append(f"https://drive.google.com/file/d/{file_id}/view")
-        try:
-            result = subprocess.run(command, check=False)
-            if result.returncode:
-                failed += 1
-                print(f"  Download failed (exit {result.returncode}).", file=sys.stderr)
-            elif checksum and (not destination.is_file() or sha256_file(destination) != checksum):
-                failed += 1
-                print("  Downloaded file SHA-256 mismatch.", file=sys.stderr)
-        except OSError as exc:
-            failed += 1
-            print(f"  Could not launch downloader: {exc}", file=sys.stderr)
+        failure = None
+        for attempt in range(1, args.attempts + 1):
+            try:
+                result = subprocess.run(command, check=False)
+            except OSError as exc:
+                failure = f"Could not launch downloader: {exc}"
+                break
+            if result.returncode == 0:
+                if checksum and (
+                    not destination.is_file() or sha256_file(destination) != checksum
+                ):
+                    failure = "Downloaded file SHA-256 mismatch."
+                else:
+                    failure = None
+                break
+            failure = f"Download failed (exit {result.returncode})."
+            if attempt < args.attempts:
+                delay = min(args.retry_delay * (2 ** (attempt - 1)), 60.0)
+                print(f"  Retry {attempt + 1}/{args.attempts} in {delay:g}s.", flush=True)
+                time.sleep(delay)
+        if failure:
+            fail(failure)
+
+    if args.failed_manifest and not args.dry_run:
+        report = args.failed_manifest.expanduser()
+        if report.is_symlink():
+            parser.error("Failed-manifest path must not be a symlink")
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(
+            json.dumps(failed_entries, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Retry manifest written: {report}")
 
     print(f"Completed: {len(downloads) - failed}/{len(downloads)} entries successful or skipped.")
     return 1 if failed else 0
