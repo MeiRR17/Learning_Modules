@@ -122,6 +122,22 @@ failures from the selected page. If the input manifest changes between
 runs, offsets may no longer refer to the same files. To cover the full
 manifest, run every page or finish with an unfiltered, unlimited run.
 
+Create a machine-readable report of each selected file's result:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --status-out status.json --failed-manifest failed.json
+```
+
+`status.json` contains a `files` array with each relative `path`, its
+`status`, and a `reason` for failures. It also includes aggregate `counts`
+and `selected`. Download runs use `downloaded` or `skipped` for successful
+files; offline verification uses `verified`, `size-checked`, or `present`
+depending on the available integrity metadata. Errors appear as `failed`.
+The status report does not include Google Drive IDs or cookies. The report
+is atomically written when the batch ends and is not produced in dry-run mode.
+Report files cannot overwrite the manifest, cookies, or input checkpoint.
+
 Download files you are authorized to access:
 
 ```bash
