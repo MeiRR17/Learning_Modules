@@ -62,7 +62,7 @@ def destination_is_safe(path: Path, root: Path) -> bool:
     return not root.is_symlink()
 
 
-def write_retry_manifest(path: Path, manifest: dict[str, list[dict[str, str]]]) -> None:
+def write_retry_manifest(path: Path, manifest: object) -> None:
     """Atomically publish retry entries without exposing a partial JSON report."""
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.is_symlink():
@@ -130,6 +130,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--attempts", type=int, default=3)
     parser.add_argument("--retry-delay", type=float, default=2.0)
     parser.add_argument("--failed-manifest", type=Path)
+    parser.add_argument("--cursor-out", type=Path,
+                        help="Write a JSON checkpoint containing the last processed path")
     parser.add_argument("--folder", action="append", default=[],
                         help="Only process this folder and its descendants (repeatable)")
     parser.add_argument("--limit", type=int,
@@ -195,12 +197,18 @@ def main(argv: list[str] | None = None) -> int:
 
     # Compare resolved paths before downloading: the retry output must never
     # replace the user's original manifest (including through symlink aliases).
-    if args.failed_manifest and not args.dry_run:
-        report = args.failed_manifest.expanduser().resolve()
-        if report == args.manifest.expanduser().resolve():
-            parser.error("--failed-manifest must differ from the input manifest")
-        if args.failed_manifest.expanduser().is_symlink():
-            parser.error("--failed-manifest must not be a symlink")
+    if not args.dry_run:
+        reports = [
+            path.expanduser() for path in (args.failed_manifest, args.cursor_out)
+            if path is not None
+        ]
+        resolved_reports = [path.resolve() for path in reports]
+        if any(path.is_symlink() for path in reports):
+            parser.error("Report destination must not be a symlink")
+        if len(set(resolved_reports)) != len(resolved_reports):
+            parser.error("--cursor-out and --failed-manifest must be distinct")
+        if args.manifest.expanduser().resolve() in resolved_reports:
+            parser.error("Report destination must differ from input manifest")
 
     root = args.output.expanduser().resolve()
     cookies = args.cookies.expanduser().resolve() if args.cookies else None
@@ -307,6 +315,23 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Failed to write retry manifest: {exc}", file=sys.stderr)
             return 1
         print(f"Retry manifest written: {report}")
+
+    if args.cursor_out and not args.dry_run:
+        checkpoint = {
+            "schema_version": 1,
+            "manifest_sha256": sha256_file(args.manifest),
+            "after": downloads[-1][1].as_posix(),
+            "processed": len(downloads),
+            "failed": failed,
+            "matching_entries": total_matching,
+            "has_more": start + len(downloads) < total_matching,
+        }
+        try:
+            write_retry_manifest(args.cursor_out.expanduser(), checkpoint)
+        except (OSError, ValueError) as exc:
+            print(f"Failed to write batch checkpoint: {exc}", file=sys.stderr)
+            return 1
+        print(f"Batch checkpoint written: {args.cursor_out}")
 
     if args.verify_only:
         print(f"Local verification completed: {len(downloads) - failed}/{len(downloads)} files present and acceptable.")
