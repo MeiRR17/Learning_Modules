@@ -619,14 +619,30 @@ def main(argv: list[str] | None = None) -> int:
                     if not args.quarantine_invalid:
                         fail("Existing file size or checksum mismatch; refusing overwrite.")
                         continue
-                    # Preserve invalid data instead of deleting or replacing it.
-                    # The backup stays beside the original in the same filesystem.
-                    backup = destination.with_name(
-                        f"{destination.name}.invalid-{uuid.uuid4().hex}"
-                    )
-                    if backup.exists() or backup.is_symlink():
+                    # Validate the partial file before moving any original.
+                    # Reusing a stale .part could reconstruct the same corrupt
+                    # content and defeat the clean replacement attempt.
+                    part_path = destination.with_name(destination.name + ".part")
+                    if part_path.is_symlink() or (
+                        part_path.exists() and not part_path.is_file()
+                    ):
+                        fail("Unsafe partial download path; refusing quarantine.")
+                        continue
+                    suffix = f".invalid-{uuid.uuid4().hex}"
+                    backup = destination.with_name(destination.name + suffix)
+                    part_backup = part_path.with_name(part_path.name + suffix)
+                    if any(
+                        path.exists() or path.is_symlink()
+                        for path in (backup, part_backup)
+                    ):
                         fail("Quarantine destination already exists.")
                         continue
+                    if part_path.is_file():
+                        part_path.rename(part_backup)
+                        outcome["quarantined_partial_backup"] = (
+                            part_backup.relative_to(root).as_posix()
+                        )
+                        print(f"  Partial download quarantined: {part_backup}", flush=True)
                     destination.rename(backup)
                     outcome["quarantined_backup"] = backup.relative_to(root).as_posix()
                     print(f"  Invalid file quarantined: {backup}", flush=True)
