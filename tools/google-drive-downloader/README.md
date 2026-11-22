@@ -35,7 +35,8 @@ python manifest_downloader.py manifest.json --output downloads \
 
 The cookie argument is optional for publicly accessible files. Failed entries
 are collected in `failed.json`, which uses the same schema as the input and
-can be supplied as the next run's manifest. The downloader preserves partial
+can be supplied as the next run's manifest. The retry report is published
+atomically and cannot use the same path as the input manifest. The downloader preserves partial
 downloads using yt-dlp's normal resume behavior and backs off on process
 failures. A checksum mismatch is not retried automatically, to avoid
 silently overwriting corrupted content. Keep manifests containing private
