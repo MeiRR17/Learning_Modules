@@ -1414,21 +1414,40 @@ def main(argv: list[str] | None = None) -> int:
                         outcome["last_downloader_exit_code"] = result.returncode
                         attempt_record["exit_code"] = result.returncode
                         if result.returncode == 0:
-                            if not destination.is_file() or destination.stat().st_size == 0:
-                                failure = "Downloader succeeded but output file is missing or empty."
-                            elif args.max_file_size is not None and destination.stat().st_size > args.max_file_size:
-                                failure = f"Downloaded file exceeds --max-file-size {args.max_file_size} bytes."
-                            elif size is not None and destination.stat().st_size != size:
-                                failure = f"Downloaded file size mismatch (expected {size} bytes)."
-                            elif checksum and sha256_file(destination) != checksum:
-                                failure = "Downloaded file SHA-256 mismatch."
+                            # A downloader subprocess can replace its output.
+                            # Recheck path safety before reading file metadata
+                            # or hashing content that may now be a symlink.
+                            verification_issue = None
+                            if not destination_is_safe(destination, root):
+                                verification_issue = "unsafe_output_path"
+                                failure = "Downloader output is a symlink or has an unsafe parent."
+                            elif not destination.is_file():
+                                verification_issue = "missing_output"
+                                failure = "Downloader succeeded but output file is missing or not regular."
                             else:
-                                failure = None
+                                actual_size = destination.stat().st_size
+                                attempt_record["output_bytes"] = actual_size
+                                if actual_size == 0:
+                                    verification_issue = "empty_output"
+                                    failure = "Downloader succeeded but output file is empty."
+                                elif args.max_file_size is not None and actual_size > args.max_file_size:
+                                    verification_issue = "file_size_limit"
+                                    failure = f"Downloaded file exceeds --max-file-size {args.max_file_size} bytes."
+                                elif size is not None and actual_size != size:
+                                    verification_issue = "size_mismatch"
+                                    failure = f"Downloaded file size mismatch (expected {size} bytes)."
+                                elif checksum and sha256_file(destination) != checksum:
+                                    verification_issue = "checksum_mismatch"
+                                    failure = "Downloaded file SHA-256 mismatch."
+                                else:
+                                    failure = None
                             attempt_record["outcome"] = (
                                 "completed" if failure is None else "verification_failed"
                             )
                             if failure is not None:
                                 attempt_record["failure_reason"] = failure
+                                attempt_record["verification_issue"] = verification_issue
+                                outcome["verification_issue"] = verification_issue
                             break
                         attempt_record["outcome"] = "nonzero_exit"
                         failure = f"Download failed (exit {result.returncode})."
