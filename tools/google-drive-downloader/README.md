@@ -25,6 +25,20 @@ Preview the destinations:
 python manifest_downloader.py manifest.json --output downloads --dry-run
 ```
 
+Audit existing files without downloading or requiring cookies:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --verify-only --failed-manifest missing-or-invalid.json
+```
+
+This reads existing local files only. An empty or absent file is reported as
+missing; a file with an expected SHA-256 is fully hashed. Without a checksum,
+the audit can confirm presence and nonzero size but **cannot** establish
+integrity. The resulting report is another valid manifest containing entries
+that need attention. The `--verify-only` and `--dry-run` modes are mutually
+exclusive.
+
 Download files you are authorized to access:
 
 ```bash
