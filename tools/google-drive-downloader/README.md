@@ -101,7 +101,12 @@ The backup is kept even if the new download fails. The option only applies
 to ordinary download mode, not `--verify-only` or `--dry-run`. Files
 rejected solely because of `--max-file-size` are **not** quarantined.
 Quarantined backups require manual review and cleanup; this mode never
-automatically deletes them.
+automatically deletes them. Add `--status-out status.json` to record the
+relative `quarantined_backup` path for each affected file. The report also
+includes `quarantined` (the number of files moved aside) and `recovered`
+(the number subsequently replaced successfully). A quarantined file whose
+replacement fails retains `status: "failed"` and its error reason, while
+the preserved backup remains available for manual recovery.
 
 ### Portable destination paths
 
