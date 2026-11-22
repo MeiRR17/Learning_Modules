@@ -169,10 +169,16 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"Cannot read checkpoint: {exc}")
         if not isinstance(checkpoint, dict) or checkpoint.get("schema_version") != 1:
             parser.error("Unsupported checkpoint format")
-        if checkpoint.get("manifest_sha256") != sha256_file(args.manifest.expanduser()):
+        try:
+            current_manifest_hash = sha256_file(args.manifest.expanduser())
+        except OSError as exc:
+            parser.error(f"Cannot read input manifest for checkpoint verification: {exc}")
+        if checkpoint.get("manifest_sha256") != current_manifest_hash:
             parser.error("Checkpoint does not match the current manifest")
         expected_folders = sorted(folder.as_posix() for folder in selected_folders)
-        if checkpoint.get("folders") != expected_folders:
+        # Checkpoints produced before folder metadata was introduced imply
+        # that no folder filter was used.
+        if checkpoint.get("folders", []) != expected_folders:
             parser.error("Checkpoint folder selection does not match --folder arguments")
         if checkpoint.get("failed", 0):
             print("Warning: checkpoint has failed entries; retry them separately.", file=sys.stderr)
