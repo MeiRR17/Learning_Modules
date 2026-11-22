@@ -510,6 +510,11 @@ def main(argv: list[str] | None = None) -> int:
             "selected": len(downloads),
             "processed": len(outcomes),
             "counts": counts,
+            "quarantined": sum("quarantined_backup" in item for item in outcomes),
+            "recovered": sum(
+                item.get("status") == "downloaded" and "quarantined_backup" in item
+                for item in outcomes
+            ),
             "files": outcomes,
         }
         write_retry_manifest(args.status_out.expanduser(), report)
@@ -623,6 +628,7 @@ def main(argv: list[str] | None = None) -> int:
                         fail("Quarantine destination already exists.")
                         continue
                     destination.rename(backup)
+                    outcome["quarantined_backup"] = backup.relative_to(root).as_posix()
                     print(f"  Invalid file quarantined: {backup}", flush=True)
                 if destination.exists() and not destination.is_file():
                     fail("Destination is not a regular file; skipped.")
