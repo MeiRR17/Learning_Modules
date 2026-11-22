@@ -173,6 +173,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Process only unresolved entries recorded in --failed-manifest")
     parser.add_argument("--status-out", type=Path,
                         help="Write a JSON report of individual file outcomes")
+    parser.add_argument("--plan-out", type=Path,
+                        help="Write selected files and declared metadata to JSON (also in dry-run)")
     parser.add_argument("--cursor-out", type=Path,
                         help="Write a JSON checkpoint containing the last processed path")
     parser.add_argument("--folder", action="append", default=[],
@@ -419,9 +421,13 @@ def main(argv: list[str] | None = None) -> int:
 
     # Compare resolved paths before downloading: the retry output must never
     # replace the user's original manifest (including through symlink aliases).
-    if not args.dry_run:
+    if not args.dry_run or args.plan_out:
         reports = [
-            path.expanduser() for path in (args.failed_manifest, args.cursor_out, args.status_out)
+            path.expanduser()
+            for path in (
+                args.plan_out,
+                *(() if args.dry_run else (args.failed_manifest, args.cursor_out, args.status_out)),
+            )
             if path is not None
         ]
         resolved_reports = [path.resolve() for path in reports]
@@ -457,8 +463,30 @@ def main(argv: list[str] | None = None) -> int:
     ]
     if any(path in declared_paths for path in inputs):
         parser.error("A manifest destination overlaps an input or credentials file")
-    if not args.dry_run and any(path in declared_paths for path in resolved_reports):
+    if (not args.dry_run or args.plan_out) and any(
+        path in declared_paths for path in resolved_reports
+    ):
         parser.error("A report destination overlaps a manifest download destination")
+    if args.plan_out:
+        plan = {
+            "schema_version": 1,
+            "manifest_sha256": sha256_file(args.manifest),
+            "matching_entries": total_matching,
+            "start_index": start,
+            "selected": len(downloads),
+            "declared_bytes": sum(size or 0 for _, _, _, size in downloads),
+            "unknown_size_count": sum(size is None for _, _, _, size in downloads),
+            "files": [
+                {"path": relative.as_posix(), "id": file_id, "size": size, "sha256": checksum}
+                for file_id, relative, checksum, size in downloads
+            ],
+        }
+        try:
+            write_retry_manifest(args.plan_out.expanduser(), plan)
+        except (OSError, ValueError) as exc:
+            print(f"Failed to write batch plan: {exc}", file=sys.stderr)
+            return 1
+        print(f"Batch plan written: {args.plan_out}")
     cookies = args.cookies.expanduser().resolve() if args.cookies else None
     if cookies and not args.verify_only and not args.dry_run and not cookies.is_file():
         parser.error(f"Cookies file does not exist: {cookies}")
