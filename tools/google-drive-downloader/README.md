@@ -167,6 +167,27 @@ Unlike other progress reports, the plan is intentionally written during
 A plan cannot replace the input manifest, credentials, checkpoint, or any
 declared download destination.
 
+Inspect local files and estimate how much data remains to transfer:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --dry-run --plan-out batch-plan.json --plan-inspect-local
+```
+
+`--plan-inspect-local` requires `--plan-out`. For each selected file, the
+plan adds `local_state` (`matching`, `partial`, `missing`, `invalid`,
+`unsafe`, `unsafe_partial`, or `unreadable`) and
+`estimated_remaining_bytes`. Known-size partial downloads subtract the
+size of the existing `.part` file. Complete files are considered matching
+only after checking any declared size and SHA-256; the
+`integrity_verified` field is true only when a checksum was verified.
+The `local_inspection` summary reports matching, partial, and blocked or
+invalid counts, the sum of known remaining-byte estimates, and how many
+estimates are unknown. Estimates exclude temporary-file overhead and may
+change before a transfer runs. Local inspection can hash entire files when
+checksums are present, so it may take time on large archives. The
+`--dry-run` mode still does not download or mutate existing files.
+
 Preview the destinations:
 
 ```bash
