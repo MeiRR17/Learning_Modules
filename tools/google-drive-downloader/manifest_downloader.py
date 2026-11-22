@@ -300,6 +300,31 @@ def main(argv: list[str] | None = None) -> int:
 
     if not downloads:
         print(f"No downloads selected (matched {total_matching}; start index {start}).")
+        if not args.dry_run:
+            # Do not leave reports from an earlier batch looking current.
+            # Keep a usable last-file cursor when the batch is exhausted.
+            try:
+                if args.failed_manifest:
+                    write_retry_manifest(args.failed_manifest.expanduser(), {})
+                if args.status_out:
+                    write_retry_manifest(args.status_out.expanduser(), {
+                        "schema_version": 1,
+                        "selected": 0, "processed": 0, "counts": {}, "files": [],
+                    })
+                if args.cursor_out:
+                    write_retry_manifest(args.cursor_out.expanduser(), {
+                        "schema_version": 1,
+                        "manifest_sha256": sha256_file(args.manifest),
+                        "folders": sorted(folder.as_posix() for folder in selected_folders),
+                        "after": resume_after.as_posix() if resume_after else None,
+                        "processed": 0,
+                        "failed": 0,
+                        "matching_entries": total_matching,
+                        "has_more": False,
+                    })
+            except (OSError, ValueError) as exc:
+                print(f"Failed to write empty-batch reports: {exc}", file=sys.stderr)
+                return 1
         return 0
     print(
         f"Selected {len(downloads)} of {total_matching} matching entries "
