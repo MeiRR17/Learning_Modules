@@ -952,17 +952,21 @@ def main(argv: list[str] | None = None) -> int:
         }
         write_retry_manifest(args.cursor_out.expanduser(), checkpoint)
 
-    def restore_backup_without_overwrite(backup: Path, target: Path) -> None:
-        """Restore a same-filesystem regular file without clobbering target.
+    def restore_backup_without_overwrite(backup: Path, target: Path) -> str | None:
+        """Install the backup at target without clobbering; report cleanup errors.
 
-        An exclusive hardlink creation fails when another process creates
-        the target after the existence check. The backup remains intact
-        until the target name has been safely installed.
+        An exclusive hard link fails when another process creates the target
+        concurrently. Once the link succeeds, the restored target exists even
+        if removing the old backup name fails.
         """
         if backup.is_symlink() or not backup.is_file():
             raise OSError(f"Quarantine backup is not a regular file: {backup}")
         os.link(backup, target, follow_symlinks=False)
-        backup.unlink()
+        try:
+            backup.unlink()
+        except OSError as exc:
+            return str(exc)
+        return None
 
     def restore_quarantine_after_failure(outcome: dict, destination: Path) -> None:
         """Restore preserved originals after any per-file failure, if safe."""
@@ -983,22 +987,39 @@ def main(argv: list[str] | None = None) -> int:
             outcome["quarantine_restore"] = "deferred_outputs_present"
             return
         try:
-            restore_backup_without_overwrite(original_backup, destination)
+            original_cleanup_error = restore_backup_without_overwrite(
+                original_backup, destination
+            )
         except OSError as exc:
             outcome["quarantine_restore"] = "original_restore_failed"
             outcome["quarantine_restore_error"] = str(exc)
             return
         outcome["quarantine_restore"] = "original_restored"
-        outcome.pop("quarantined_backup", None)
+        cleanup_errors = {}
+        if original_cleanup_error is None:
+            outcome.pop("quarantined_backup", None)
+        else:
+            cleanup_errors["original"] = original_cleanup_error
         if partial_backup is not None:
             try:
-                restore_backup_without_overwrite(partial_backup, part_path)
+                partial_cleanup_error = restore_backup_without_overwrite(
+                    partial_backup, part_path
+                )
             except OSError as exc:
                 outcome["quarantine_restore"] = "partial_restore_failed"
                 outcome["quarantine_restore_error"] = str(exc)
+                if cleanup_errors:
+                    outcome["quarantine_cleanup_errors"] = cleanup_errors
                 return
-            outcome.pop("quarantined_partial_backup", None)
-        outcome["quarantine_restore"] = "restored"
+            if partial_cleanup_error is None:
+                outcome.pop("quarantined_partial_backup", None)
+            else:
+                cleanup_errors["partial"] = partial_cleanup_error
+        if cleanup_errors:
+            outcome["quarantine_restore"] = "restored_backup_retained"
+            outcome["quarantine_cleanup_errors"] = cleanup_errors
+        else:
+            outcome["quarantine_restore"] = "restored"
 
     try:
         for index, (file_id, relative, checksum, size) in enumerate(downloads, start=1):
