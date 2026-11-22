@@ -270,6 +270,26 @@ is positive, even for an empty or otherwise successful batch. Without
 `--retain-failures`, each run replaces the retry list as before. Use a separate input manifest when retrying failures, since an
 output retry manifest cannot overwrite the active input manifest.
 
+Retry only outstanding entries using the original manifest:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --failed-manifest failed.json --retain-failures --only-failed \
+  --limit 10 --status-out retry-status.json
+```
+
+`--only-failed` requires both `--retain-failures` and an existing
+`--failed-manifest`. It selects only paths recorded as unresolved in that
+report, in the original manifest's order. As each selected file succeeds,
+its entry is removed from the retained failure report; unsuccessful entries
+remain. A failure referring to a file no longer in the original manifest is
+rejected instead of silently ignored. Folder selection and exclusions still
+apply, and `--limit` allows bounded retry batches. Run the command again
+to attempt remaining failures. Because the eligible selection changes as
+files are resolved, `--only-failed` cannot be combined with `--offset`,
+`--after`, `--cursor-in`, or `--cursor-out`. The command exits nonzero
+until the retained retry manifest is empty.
+
 Download files you are authorized to access:
 
 ```bash
