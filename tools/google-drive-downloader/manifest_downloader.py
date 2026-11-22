@@ -175,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Write a JSON report of individual file outcomes")
     parser.add_argument("--plan-out", type=Path,
                         help="Write selected files and declared metadata to JSON (also in dry-run)")
+    parser.add_argument("--plan-inspect-local", action="store_true",
+                        help="Inspect local destinations and partial files in --plan-out")
     parser.add_argument("--cursor-out", type=Path,
                         help="Write a JSON checkpoint containing the last processed path")
     parser.add_argument("--folder", action="append", default=[],
@@ -197,6 +199,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.retain_failures and not args.failed_manifest:
         parser.error("--retain-failures requires --failed-manifest")
+    if args.plan_inspect_local and not args.plan_out:
+        parser.error("--plan-inspect-local requires --plan-out")
     if args.only_failed and not args.retain_failures:
         parser.error("--only-failed requires --retain-failures")
     if args.only_failed and (args.after is not None or args.cursor_in or args.offset or args.cursor_out):
@@ -469,6 +473,56 @@ def main(argv: list[str] | None = None) -> int:
     ):
         parser.error("A report destination overlaps a manifest download destination")
     if args.plan_out:
+        def inspect_local(relative: Path, checksum: str | None, size: int | None) -> dict:
+            destination = root / relative
+            if not destination_is_safe(destination, root):
+                return {"local_state": "unsafe", "estimated_remaining_bytes": None}
+            part_path = destination.with_name(destination.name + ".part")
+            if part_path.is_symlink() or (part_path.exists() and not part_path.is_file()):
+                return {"local_state": "unsafe_partial", "estimated_remaining_bytes": None}
+            try:
+                if destination.is_file():
+                    local_bytes = destination.stat().st_size
+                    if local_bytes <= 0 or (size is not None and local_bytes != size):
+                        return {
+                            "local_state": "invalid", "local_bytes": local_bytes,
+                            "estimated_remaining_bytes": size,
+                        }
+                    if checksum is not None and sha256_file(destination) != checksum:
+                        return {
+                            "local_state": "invalid", "local_bytes": local_bytes,
+                            "estimated_remaining_bytes": size,
+                        }
+                    return {
+                        "local_state": "matching", "local_bytes": local_bytes,
+                        "estimated_remaining_bytes": 0,
+                        "integrity_verified": checksum is not None,
+                    }
+                if destination.exists():
+                    return {"local_state": "unsafe", "estimated_remaining_bytes": None}
+                if part_path.is_file():
+                    part_bytes = part_path.stat().st_size
+                    return {
+                        "local_state": "partial", "partial_bytes": part_bytes,
+                        "estimated_remaining_bytes": max(size - part_bytes, 0)
+                        if size is not None else None,
+                    }
+                return {"local_state": "missing", "estimated_remaining_bytes": size}
+            except OSError as exc:
+                return {
+                    "local_state": "unreadable",
+                    "error": str(exc),
+                    "estimated_remaining_bytes": None,
+                }
+
+        planned_files = [
+            {
+                "path": relative.as_posix(), "id": file_id,
+                "size": size, "sha256": checksum,
+                **(inspect_local(relative, checksum, size) if args.plan_inspect_local else {}),
+            }
+            for file_id, relative, checksum, size in downloads
+        ]
         plan = {
             "schema_version": 1,
             "manifest_sha256": sha256_file(args.manifest),
@@ -477,11 +531,22 @@ def main(argv: list[str] | None = None) -> int:
             "selected": len(downloads),
             "declared_bytes": sum(size or 0 for _, _, _, size in downloads),
             "unknown_size_count": sum(size is None for _, _, _, size in downloads),
-            "files": [
-                {"path": relative.as_posix(), "id": file_id, "size": size, "sha256": checksum}
-                for file_id, relative, checksum, size in downloads
-            ],
+            "files": planned_files,
         }
+        if args.plan_inspect_local:
+            estimates = [item["estimated_remaining_bytes"] for item in planned_files]
+            plan["local_inspection"] = {
+                "matching": sum(item["local_state"] == "matching" for item in planned_files),
+                "partial": sum(item["local_state"] == "partial" for item in planned_files),
+                "blocked_or_invalid": sum(
+                    item["local_state"] in ("invalid", "unsafe", "unsafe_partial", "unreadable")
+                    for item in planned_files
+                ),
+                "estimated_remaining_bytes_known": sum(
+                    value for value in estimates if value is not None
+                ),
+                "unknown_estimate_count": sum(value is None for value in estimates),
+            }
         try:
             write_retry_manifest(args.plan_out.expanduser(), plan)
         except (OSError, ValueError) as exc:
