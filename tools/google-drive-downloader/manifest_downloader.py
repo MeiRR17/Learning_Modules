@@ -181,6 +181,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="In dry-run, exit nonzero if the inspected plan contains blocked files")
     parser.add_argument("--fail-on-quarantine-plan", action="store_true",
                         help="In dry-run, reject plans requiring quarantine of existing files")
+    parser.add_argument("--fail-on-disk-space-plan", action="store_true",
+                        help="In dry-run, reject a plan that cannot fit with --min-free-space reserve")
     parser.add_argument("--fail-on-unknown-size-plan", action="store_true",
                         help="In dry-run, exit nonzero if actionable files have unknown transfer sizes")
     parser.add_argument("--max-estimated-transfer", type=int, metavar="BYTES",
@@ -215,6 +217,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--fail-on-unknown-size-plan requires --plan-inspect-local and --dry-run")
     if args.fail_on_quarantine_plan and not (args.plan_inspect_local and args.dry_run):
         parser.error("--fail-on-quarantine-plan requires --plan-inspect-local and --dry-run")
+    if args.fail_on_disk_space_plan and not (args.plan_inspect_local and args.dry_run):
+        parser.error("--fail-on-disk-space-plan requires --plan-inspect-local and --dry-run")
     if args.max_estimated_transfer is not None:
         if args.max_estimated_transfer < 0:
             parser.error("--max-estimated-transfer must be zero or greater")
@@ -705,6 +709,47 @@ def main(argv: list[str] | None = None) -> int:
             if args.fail_on_unknown_size_plan:
                 checks.append({
                     "code": "unknown_transfer_size",
+                    "passed": unknown == 0,
+                    "observed": unknown,
+                    "limit": 0,
+                })
+            if args.fail_on_disk_space_plan:
+                # The destination directory may not exist during dry-run.
+                # Query its closest existing ancestor on the same filesystem.
+                usage_path = root
+                while not usage_path.exists() and usage_path != usage_path.parent:
+                    usage_path = usage_path.parent
+                try:
+                    free_bytes = shutil.disk_usage(usage_path).free
+                except OSError as exc:
+                    plan["disk_space"] = {
+                        "error": str(exc),
+                        "free_bytes": None,
+                        "required_bytes": None,
+                    }
+                    checks.append({
+                        "code": "disk_space_available",
+                        "passed": False,
+                        "observed": None,
+                        "limit": None,
+                    })
+                else:
+                    required_bytes = estimate + args.min_free_space
+                    plan["disk_space"] = {
+                        "free_bytes": free_bytes,
+                        "estimated_remaining_bytes": estimate,
+                        "reserved_bytes": args.min_free_space,
+                        "required_bytes": required_bytes,
+                        "filesystem_path": str(usage_path),
+                    }
+                    checks.append({
+                        "code": "disk_space_available",
+                        "passed": free_bytes >= required_bytes,
+                        "observed": free_bytes,
+                        "limit": required_bytes,
+                    })
+                checks.append({
+                    "code": "disk_space_estimate_known",
                     "passed": unknown == 0,
                     "observed": unknown,
                     "limit": 0,
