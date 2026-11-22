@@ -128,6 +128,8 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--verify-only", action="store_true",
                       help="Audit local files without network access or downloading")
     parser.add_argument("--attempts", type=int, default=3)
+    parser.add_argument("--max-failures", type=int,
+                        help="Stop the batch after N failed files (default: no limit)")
     parser.add_argument("--retry-delay", type=float, default=2.0)
     parser.add_argument("--failed-manifest", type=Path)
     parser.add_argument("--status-out", type=Path,
@@ -148,6 +150,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be a positive integer")
+    if args.max_failures is not None and args.max_failures < 1:
+        parser.error("--max-failures must be a positive integer")
     if args.offset < 0:
         parser.error("--offset must be zero or greater")
     if args.after is not None:
@@ -282,6 +286,11 @@ def main(argv: list[str] | None = None) -> int:
         write_retry_manifest(args.status_out.expanduser(), report)
 
     for index, (file_id, relative, checksum, size) in enumerate(downloads, start=1):
+        # Check before selecting the next file: all previous outcomes have
+        # already been atomically journaled by the per-file finally block.
+        if args.max_failures is not None and failed >= args.max_failures:
+            print(f"Stopping batch after {failed} failed files.", file=sys.stderr)
+            break
         destination = root / relative
         outcome = {"path": relative.as_posix(), "status": "pending"}
         outcomes.append(outcome)
@@ -394,11 +403,11 @@ def main(argv: list[str] | None = None) -> int:
             "schema_version": 1,
             "manifest_sha256": sha256_file(args.manifest),
             "folders": sorted(folder.as_posix() for folder in selected_folders),
-            "after": downloads[-1][1].as_posix(),
-            "processed": len(downloads),
+            "after": outcomes[-1]["path"],
+            "processed": len(outcomes),
             "failed": failed,
             "matching_entries": total_matching,
-            "has_more": start + len(downloads) < total_matching,
+            "has_more": start + len(outcomes) < total_matching,
         }
         try:
             write_retry_manifest(args.cursor_out.expanduser(), checkpoint)
@@ -407,10 +416,11 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"Batch checkpoint written: {args.cursor_out}")
 
+    processed = len(outcomes)
     if args.verify_only:
-        print(f"Local verification completed: {len(downloads) - failed}/{len(downloads)} files present and acceptable.")
+        print(f"Local verification completed: {processed - failed}/{processed} checked; {len(downloads) - processed} unprocessed.")
     else:
-        print(f"Completed: {len(downloads) - failed}/{len(downloads)} entries successful or skipped.")
+        print(f"Completed: {processed - failed}/{processed} entries successful or skipped; {len(downloads) - processed} unprocessed.")
     return 1 if failed else 0
 
 
