@@ -92,6 +92,23 @@ python manifest_downloader.py manifest.json \
   --failed-manifest failed-next.json --cursor-out checkpoint-next.json
 ```
 
+You can now resume directly from the checkpoint without manually copying
+the `after` value:
+
+```bash
+python manifest_downloader.py manifest.json --limit 10 \
+  --cursor-in checkpoint.json --cursor-out checkpoint.json \
+  --failed-manifest failed-next.json
+```
+
+`--cursor-in` is mutually exclusive with `--after` and `--offset`.
+Before processing files, the downloader compares the checkpoint's
+`manifest_sha256` with the current manifest and checks that the
+`--folder` selection is unchanged. It rejects stale or incompatible
+checkpoints rather than silently restarting. The checkpoint may be updated
+in place with `--cursor-out`. Previous failures are reported as a warning;
+they still need to be retried using their own failure manifest.
+
 The checkpoint is written only after the selected batch has finished; it
 is not an in-flight journal. A nonzero `failed` count means some selected
 entries were unsuccessful: retry them using `failed.json` before considering
