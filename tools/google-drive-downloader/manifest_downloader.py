@@ -179,6 +179,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Inspect local destinations and partial files in --plan-out")
     parser.add_argument("--fail-on-blocked-plan", action="store_true",
                         help="In dry-run, exit nonzero if the inspected plan contains blocked files")
+    parser.add_argument("--fail-on-quarantine-plan", action="store_true",
+                        help="In dry-run, reject plans requiring quarantine of existing files")
     parser.add_argument("--fail-on-unknown-size-plan", action="store_true",
                         help="In dry-run, exit nonzero if actionable files have unknown transfer sizes")
     parser.add_argument("--max-estimated-transfer", type=int, metavar="BYTES",
@@ -211,6 +213,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--fail-on-blocked-plan requires --plan-inspect-local and --dry-run")
     if args.fail_on_unknown_size_plan and not (args.plan_inspect_local and args.dry_run):
         parser.error("--fail-on-unknown-size-plan requires --plan-inspect-local and --dry-run")
+    if args.fail_on_quarantine_plan and not (args.plan_inspect_local and args.dry_run):
+        parser.error("--fail-on-quarantine-plan requires --plan-inspect-local and --dry-run")
     if args.max_estimated_transfer is not None:
         if args.max_estimated_transfer < 0:
             parser.error("--max-estimated-transfer must be zero or greater")
@@ -688,6 +692,14 @@ def main(argv: list[str] | None = None) -> int:
                     "code": "blocked_files",
                     "passed": blocked == 0,
                     "observed": blocked,
+                    "limit": 0,
+                })
+            if args.fail_on_quarantine_plan:
+                quarantine_count = inspection["actions"]["quarantine_and_download"]
+                checks.append({
+                    "code": "quarantine_required",
+                    "passed": quarantine_count == 0,
+                    "observed": quarantine_count,
                     "limit": 0,
                 })
             if args.fail_on_unknown_size_plan:
