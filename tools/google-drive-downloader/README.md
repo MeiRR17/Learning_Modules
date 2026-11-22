@@ -77,6 +77,23 @@ python manifest_downloader.py manifest.json --folder "Course/Week 1" \
   --folder "Other Course" --verify-only
 ```
 
+Select individual files by their complete relative manifest destinations:
+
+```bash
+python manifest_downloader.py manifest.json \
+  --file "Course/Week 1/lecture.mp4" \
+  --file "Course/Week 2/lecture.mp4" --verify-only
+```
+
+Repeat `--file` to include multiple exact destinations in manifest order.
+Unknown paths cause an error. When `--file` and `--folder` are both
+specified, a file must match both filters; `--exclude-file` and
+`--exclude-folder` still take precedence. All selection filters apply
+before pagination and `--only-failed` intersects the resulting set with
+unresolved retries. Checkpoints include `selected_files` and reject a
+different `--file` selection when resuming. Checkpoints created before
+this field existed represent an unrestricted file selection.
+
 Folders are matched as complete relative paths, including their descendants,
 not arbitrary string prefixes. Repeating `--folder` combines selections.
 Use `--exclude-folder` to omit entire subtrees, including when they fall
