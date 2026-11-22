@@ -239,10 +239,16 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("Checkpoint file exclusions do not match --exclude-file arguments")
         if checkpoint.get("failed", 0):
             print("Warning: checkpoint has failed entries; retry them separately.", file=sys.stderr)
-        try:
-            resume_after = relative_destination(checkpoint["after"], allow_subdirs=True)
-        except (KeyError, TypeError, ValueError) as exc:
-            parser.error(f"Invalid checkpoint cursor: {exc}")
+        if checkpoint.get("after") is None:
+            # A genuinely empty filtered manifest has no last file.
+            if checkpoint.get("matching_entries") != 0 or checkpoint.get("has_more") is not False:
+                parser.error("Null checkpoint cursor is valid only for an empty selection")
+            resume_after = None
+        else:
+            try:
+                resume_after = relative_destination(checkpoint["after"], allow_subdirs=True)
+            except (TypeError, ValueError) as exc:
+                parser.error(f"Invalid checkpoint cursor: {exc}")
     if args.attempts < 1 or not math.isfinite(args.retry_delay) or not 0 <= args.retry_delay <= 3600:
         parser.error("Require --attempts >= 1 and 0 <= --retry-delay <= 3600")
     if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
@@ -327,6 +333,9 @@ def main(argv: list[str] | None = None) -> int:
         # Inclusion and exclusion precede slicing, so cursors and offsets
         # refer only to entries that satisfy both selection rules.
         total_matching = len(downloads)
+        last_matching_path = downloads[-1][1] if downloads else None
+        if args.cursor_in and checkpoint.get("after") is None and total_matching != 0:
+            parser.error("Checkpoint empty selection no longer matches the manifest")
         start = args.offset
         if resume_after is not None:
             matches = [
@@ -426,7 +435,9 @@ def main(argv: list[str] | None = None) -> int:
                         "folders": sorted(folder.as_posix() for folder in selected_folders),
                         "excluded_folders": sorted(folder.as_posix() for folder in excluded_folders),
                         "excluded_files": sorted(path.as_posix() for path in excluded_files),
-                        "after": resume_after.as_posix() if resume_after else None,
+                        "after": (
+                            resume_after or last_matching_path
+                        ).as_posix() if (resume_after or last_matching_path) else None,
                         "processed": 0,
                         "failed": 0,
                         "unresolved_failures": unresolved_failure_count(),
