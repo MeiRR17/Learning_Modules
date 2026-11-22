@@ -134,13 +134,23 @@ def main(argv: list[str] | None = None) -> int:
                         help="Only process this folder and its descendants (repeatable)")
     parser.add_argument("--limit", type=int,
                         help="Process at most N selected files")
-    parser.add_argument("--offset", type=int, default=0,
-                        help="Skip the first N matching entries before applying --limit")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--offset", type=int, default=0,
+                           help="Skip first N matching entries before --limit")
+    selection.add_argument("--after", type=str,
+                           help="Resume after this exact relative destination path")
     args = parser.parse_args(argv)
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be a positive integer")
     if args.offset < 0:
         parser.error("--offset must be zero or greater")
+    if args.after is not None:
+        try:
+            resume_after = relative_destination(args.after, allow_subdirs=True)
+        except ValueError as exc:
+            parser.error(f"Invalid --after: {exc}")
+    else:
+        resume_after = None
     try:
         selected_folders = [
             relative_destination(folder, allow_subdirs=True)
@@ -165,10 +175,21 @@ def main(argv: list[str] | None = None) -> int:
         # Preserve stable manifest order across successive batch invocations.
         # Filtering precedes slicing, so offsets refer to matching entries.
         total_matching = len(downloads)
+        start = args.offset
+        if resume_after is not None:
+            matches = [
+                i for i, entry in enumerate(downloads)
+                if entry[1] == resume_after
+            ]
+            if not matches:
+                parser.error(
+                    f"--after path not found among matching entries: {args.after}"
+                )
+            start = matches[0] + 1
         if args.limit is not None:
-            downloads = downloads[args.offset:args.offset + args.limit]
+            downloads = downloads[start:start + args.limit]
         else:
-            downloads = downloads[args.offset:]
+            downloads = downloads[start:]
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(f"Invalid manifest: {exc}")
 
@@ -187,11 +208,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"Cookies file does not exist: {cookies}")
 
     if not downloads:
-        print(f"No downloads selected (matched {total_matching}; offset {args.offset}).")
+        print(f"No downloads selected (matched {total_matching}; start index {start}).")
         return 0
     print(
         f"Selected {len(downloads)} of {total_matching} matching entries "
-        f"(offset {args.offset})."
+        f"(start index {start})."
     )
 
     failed = 0
