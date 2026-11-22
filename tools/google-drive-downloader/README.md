@@ -373,6 +373,26 @@ as blocked. The optional `error` field gives further filesystem detail
 for `local_read_error`. These reason codes describe local preflight
 conditions, not remote access failures.
 
+Reject existing local files that would be accepted without SHA-256 verification:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --dry-run --plan-out batch-plan.json --plan-inspect-local \
+  --fail-on-unverified-local-plan
+```
+
+`--fail-on-unverified-local-plan` requires `--dry-run` and
+`--plan-inspect-local`. It checks files whose `planned_action` is
+`skip` or `verify` and rejects any whose `integrity_verified`
+field is not true. The plan reports their count in
+`local_inspection.unverified_local_count` and records the
+`unverified_local_files` preflight code when the policy is enabled.
+This permits files awaiting a new download to lack SHA-256 metadata
+while ensuring that accepted existing copies have actually passed
+checksum verification. Use `--fail-on-missing-checksum-plan` instead
+to require hashes for *every* selected file, including new downloads.
+An accepted file checked only by size is not cryptographically verified.
+
 Require SHA-256 metadata for every selected file while still exporting a plan:
 
 ```bash
@@ -409,7 +429,7 @@ The `preflight` object is included whenever `--plan-out` is used.
 Its `passed` field is true only if every **enabled** preflight
 policy passes. `checks` is empty when no preflight policy was
 enabled; that means no policy was evaluated, not that all files are safe.
-Supported check codes are `missing_sha256`, `blocked_files`, `quarantine_required`, `unknown_transfer_size`,
+Supported check codes are `missing_sha256`, `unverified_local_files`, `blocked_files`, `quarantine_required`, `unknown_transfer_size`,
 `transfer_size_known`, `estimated_transfer_budget`, `planned_transfer_count`, `quarantine_bytes_budget`, `disk_space_estimate_known`, and `disk_space_available`.
 Each check exposes the observed count or byte estimate and its limit.
 The plan is written before a failing preflight exits nonzero, so
