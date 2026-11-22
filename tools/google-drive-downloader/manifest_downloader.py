@@ -18,6 +18,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -154,6 +155,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--retry-delay", type=float, default=2.0)
     parser.add_argument("--timeout", type=float,
                         help="Maximum seconds per yt-dlp attempt (default: unlimited)")
+    parser.add_argument("--min-free-space", type=int, default=0, metavar="BYTES",
+                        help="Reserve this many free bytes in the download filesystem")
     parser.add_argument("--failed-manifest", type=Path)
     parser.add_argument("--retain-failures", action="store_true",
                         help="Carry forward unresolved entries from an existing failed manifest")
@@ -262,6 +265,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("Require --attempts >= 1 and 0 <= --retry-delay <= 3600")
     if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
         parser.error("--timeout must be a finite number greater than zero")
+    if args.min_free_space < 0:
+        parser.error("--min-free-space must be zero or greater")
 
     failed_entries = {}
     if args.retain_failures and args.failed_manifest:
@@ -590,6 +595,18 @@ def main(argv: list[str] | None = None) -> int:
                     fail("Destination is not a regular file; skipped.")
                     continue
                 destination.parent.mkdir(parents=True, exist_ok=True)
+                if args.min_free_space:
+                    free_bytes = shutil.disk_usage(destination.parent).free
+                    # Expected size is a conservative preflight estimate for
+                    # new files. Unknown-size downloads only check the reserve.
+                    required = args.min_free_space + (size or 0)
+                    if free_bytes < required:
+                        fail(
+                            "Insufficient free disk space: "
+                            f"{free_bytes} bytes available, {required} required "
+                            "(reserve plus expected file size)."
+                        )
+                        continue
                 command = [
                     sys.executable, "-m", "yt_dlp",
                     "--continue",
