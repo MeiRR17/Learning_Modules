@@ -10,14 +10,16 @@ Create a local `manifest.json`:
 ```json
 {
   "Course/Week 1": [
-    {"id": "YOUR_GOOGLE_DRIVE_FILE_ID", "name": "lecture.mp4"}
+    {"id": "YOUR_GOOGLE_DRIVE_FILE_ID", "name": "lecture.mp4", "size": 1048576}
   ]
 }
 ```
 
-Optionally include a lowercase or uppercase 64-character SHA-256 hash for
-each file as `"sha256"`. Existing files that do not match the supplied
-checksum are **not overwritten**; downloaded files are also checked.
+Each file may include an optional positive integer `"size"` in bytes and an
+optional 64-character hexadecimal `"sha256"` checksum. Existing files with
+mismatched sizes or checksums are **not overwritten**. New downloads are also
+checked against any supplied expectations. Size alone can detect truncation,
+but does not prove file integrity.
 
 Preview the destinations:
 
@@ -34,8 +36,8 @@ python manifest_downloader.py manifest.json --output downloads \
 
 This reads existing local files only. An empty or absent file is reported as
 missing; a file with an expected SHA-256 is fully hashed. Without a checksum,
-the audit can confirm presence and nonzero size but **cannot** establish
-integrity. The resulting report is another valid manifest containing entries
+the audit can confirm presence, nonzero size and any supplied expected
+size but **cannot** establish cryptographic integrity. The resulting report is another valid manifest containing entries
 that need attention. The `--verify-only` and `--dry-run` modes are mutually
 exclusive.
 
