@@ -1,5 +1,48 @@
 # Google Drive Downloader
 
+## Manifest-based downloader (new)
+
+For new download lists, use `manifest_downloader.py` instead of editing
+`COURSE_STRUCTURE` in the historical script. Requires Python 3.9+ and yt-dlp.
+
+Create a local `manifest.json`:
+
+```json
+{
+  "Course/Week 1": [
+    {"id": "YOUR_GOOGLE_DRIVE_FILE_ID", "name": "lecture.mp4"}
+  ]
+}
+```
+
+Optionally include a lowercase or uppercase 64-character SHA-256 hash for
+each file as `"sha256"`. Existing files that do not match the supplied
+checksum are **not overwritten**; downloaded files are also checked.
+
+Preview the destinations:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads --dry-run
+```
+
+Download files you are authorized to access:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --cookies /path/to/cookies.txt --attempts 3 --retry-delay 2 \
+  --failed-manifest failed.json
+```
+
+The cookie argument is optional for publicly accessible files. Failed entries
+are collected in `failed.json`, which uses the same schema as the input and
+can be supplied as the next run's manifest. The downloader preserves partial
+downloads using yt-dlp's normal resume behavior and backs off on process
+failures. A checksum mismatch is not retried automatically, to avoid
+silently overwriting corrupted content. Keep manifests containing private
+file IDs and cookie files outside public version control.
+
+---
+
 A Python script to automatically download video courses from Google Drive using yt-dlp with cookie-based authentication. Maintains the exact folder hierarchy structure locally.
 
 ## Features
