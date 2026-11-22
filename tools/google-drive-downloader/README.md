@@ -716,6 +716,31 @@ entries with a fresh budget.
 This is an invocation-count limit, not a network bandwidth or elapsed-time
 limit.
 
+Limit cumulative subprocess time as an alternative or complement to
+`--max-total-attempts`:
+
+```bash
+python manifest_downloader.py manifest.json --output downloads \
+  --max-download-seconds 600 --timeout 120 \
+  --status-out status.json --cursor-out progress.json
+```
+
+`--max-download-seconds` takes a finite positive number of seconds.
+Before each yt-dlp invocation, the downloader caps its effective
+timeout at the lesser of `--timeout` (if specified) and the remaining
+batch download-time budget. Time used by subprocess invocations is
+accumulated across files and retries with a monotonic clock, including
+timed-out and failed attempts. Backoff waits, local hashing, and
+filesystem work do not count toward this limit; it is **not** a
+whole-process wall-clock deadline. When the time budget prevents a
+retry, `retry_suppressed_reason` becomes `max_download_seconds`.
+The status report records `max_download_seconds` and
+`download_time_budget_exhausted`; the checkpoint also records
+`download_seconds_used`. A time-budget stop uses
+`stop_reason: "max_download_seconds"` and returns a nonzero exit
+status when it interrupts the selected batch. If several limits
+apply, whichever actively prevents work is recorded.
+
 Download attempt telemetry is included in `--status-out`. For each
 file that reaches the yt-dlp download loop, `download_attempts` counts
 subprocess invocations (including timed-out or failed launches),
