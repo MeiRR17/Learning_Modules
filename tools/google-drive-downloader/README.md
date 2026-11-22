@@ -670,6 +670,18 @@ python manifest_downloader.py manifest.json --output downloads \
 and `selected`. Download runs use `downloaded` or `skipped` for successful
 files; offline verification uses `verified`, `size-checked`, or `present`
 depending on the available integrity metadata. Errors appear as `failed`.
+Download attempt telemetry is included in `--status-out`. For each
+file that reaches the yt-dlp download loop, `download_attempts` counts
+subprocess invocations (including timed-out or failed launches),
+`download_elapsed_seconds` records their cumulative wall-clock time
+rounded to milliseconds, and `last_downloader_exit_code` records the
+most recent completed yt-dlp process exit code, when available. The
+report's top-level `download_attempts` and
+`download_elapsed_seconds` summarize these fields across processed
+files. Backoff delays, hashing, and other filesystem operations are
+not included in the elapsed figure. Files skipped or rejected before
+the download loop omit these per-file fields.
+
 The status report does not include Google Drive IDs or cookies. The report
 is atomically updated after each selected file, including failures; it is not
 produced in dry-run mode. If interrupted, the report preserves outcomes written
