@@ -1284,8 +1284,10 @@ def main(argv: list[str] | None = None) -> int:
                     except subprocess.TimeoutExpired:
                         attempt_record["outcome"] = "timeout"
                         failure = f"Download attempt timed out after {args.timeout:g}s."
+                        attempt_record["failure_reason"] = failure
                     except OSError as exc:
                         failure = f"Could not launch downloader: {exc}"
+                        attempt_record["failure_reason"] = failure
                         break
                     finally:
                         elapsed = round(time.monotonic() - attempt_started, 3)
@@ -1311,11 +1313,15 @@ def main(argv: list[str] | None = None) -> int:
                             attempt_record["outcome"] = (
                                 "completed" if failure is None else "verification_failed"
                             )
+                            if failure is not None:
+                                attempt_record["failure_reason"] = failure
                             break
                         attempt_record["outcome"] = "nonzero_exit"
                         failure = f"Download failed (exit {result.returncode})."
+                        attempt_record["failure_reason"] = failure
                     if attempt < args.attempts:
                         delay = min(args.retry_delay * (2 ** (attempt - 1)), 60.0)
+                        attempt_record["retry_delay_seconds"] = delay
                         print(f"  Retry {attempt + 1}/{args.attempts} in {delay:g}s.", flush=True)
                         time.sleep(delay)
                 if failure:
