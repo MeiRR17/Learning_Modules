@@ -159,6 +159,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Write a JSON checkpoint containing the last processed path")
     parser.add_argument("--folder", action="append", default=[],
                         help="Only process this folder and its descendants (repeatable)")
+    parser.add_argument("--exclude-folder", action="append", default=[],
+                        help="Skip this folder and its descendants (repeatable)")
     parser.add_argument("--limit", type=int,
                         help="Process at most N selected files")
     selection = parser.add_mutually_exclusive_group()
@@ -187,8 +189,12 @@ def main(argv: list[str] | None = None) -> int:
             relative_destination(folder, allow_subdirs=True)
             for folder in args.folder
         ]
+        excluded_folders = [
+            relative_destination(folder, allow_subdirs=True)
+            for folder in args.exclude_folder
+        ]
     except ValueError as exc:
-        parser.error(f"Invalid --folder: {exc}")
+        parser.error(f"Invalid folder selection: {exc}")
     if args.cursor_in:
         try:
             checkpoint = json.loads(args.cursor_in.expanduser().read_text(encoding="utf-8"))
@@ -207,6 +213,9 @@ def main(argv: list[str] | None = None) -> int:
         # that no folder filter was used.
         if checkpoint.get("folders", []) != expected_folders:
             parser.error("Checkpoint folder selection does not match --folder arguments")
+        expected_exclusions = sorted(folder.as_posix() for folder in excluded_folders)
+        if checkpoint.get("excluded_folders", []) != expected_exclusions:
+            parser.error("Checkpoint exclusion selection does not match --exclude-folder arguments")
         if checkpoint.get("failed", 0):
             print("Warning: checkpoint has failed entries; retry them separately.", file=sys.stderr)
         try:
@@ -231,8 +240,17 @@ def main(argv: list[str] | None = None) -> int:
                     for folder in selected_folders
                 )
             ]
+        if excluded_folders:
+            downloads = [
+                entry for entry in downloads
+                if not any(
+                    entry[1].parent == folder or folder in entry[1].parents
+                    for folder in excluded_folders
+                )
+            ]
         # Preserve stable manifest order across successive batch invocations.
-        # Filtering precedes slicing, so offsets refer to matching entries.
+        # Inclusion and exclusion precede slicing, so cursors and offsets
+        # refer only to entries that satisfy both selection rules.
         total_matching = len(downloads)
         start = args.offset
         if resume_after is not None:
@@ -316,6 +334,8 @@ def main(argv: list[str] | None = None) -> int:
                         "schema_version": 1,
                         "manifest_sha256": sha256_file(args.manifest),
                         "folders": sorted(folder.as_posix() for folder in selected_folders),
+            "excluded_folders": sorted(folder.as_posix() for folder in excluded_folders),
+                        "excluded_folders": sorted(folder.as_posix() for folder in excluded_folders),
                         "after": resume_after.as_posix() if resume_after else None,
                         "processed": 0,
                         "failed": 0,
