@@ -21,6 +21,16 @@ mismatched sizes or checksums are **not overwritten**. New downloads are also
 checked against any supplied expectations. Size alone can detect truncation,
 but does not prove file integrity.
 
+### Portable destination paths
+
+Manifest folder names and filenames must be relative and use forward slashes
+for nested folders. Path traversal, control characters, Windows-invalid
+characters (`< > : " / \\ | ? *` where `/` is only a folder separator),
+and Windows-reserved names such as `CON`, `NUL`, `COM1`, and `LPT1`
+are rejected, including names with extensions (for example `CON.txt`).
+Output roots that are themselves symbolic links are also rejected; existing
+symlinked paths inside the output directory remain prohibited.
+
 Preview the destinations:
 
 ```bash
