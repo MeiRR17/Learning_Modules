@@ -159,6 +159,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Reserve this many free bytes in the download filesystem")
     parser.add_argument("--rate-limit", type=int, metavar="BYTES_PER_SECOND",
                         help="Limit yt-dlp transfer rate per download (default: unlimited)")
+    parser.add_argument("--max-file-size", type=int, metavar="BYTES",
+                        help="Refuse files larger than this byte limit")
     parser.add_argument("--failed-manifest", type=Path)
     parser.add_argument("--retain-failures", action="store_true",
                         help="Carry forward unresolved entries from an existing failed manifest")
@@ -271,6 +273,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--min-free-space must be zero or greater")
     if args.rate_limit is not None and args.rate_limit < 1:
         parser.error("--rate-limit must be a positive integer of bytes per second")
+    if args.max_file_size is not None and args.max_file_size < 1:
+        parser.error("--max-file-size must be a positive integer of bytes")
 
     failed_entries = {}
     if args.retain_failures and args.failed_manifest:
@@ -567,11 +571,19 @@ def main(argv: list[str] | None = None) -> int:
                 if not destination_is_safe(destination, root):
                     fail("Symlink destination refused.")
                     continue
+                if args.max_file_size is not None and size is not None and size > args.max_file_size:
+                    fail(
+                        f"Expected file size {size} exceeds --max-file-size "
+                        f"{args.max_file_size} bytes."
+                    )
+                    continue
                 if args.verify_only:
                     if not destination.is_file():
                         fail("Missing or non-regular local file.")
                     elif destination.stat().st_size == 0:
                         fail("Local file is empty.")
+                    elif args.max_file_size is not None and destination.stat().st_size > args.max_file_size:
+                        fail(f"Local file exceeds --max-file-size {args.max_file_size} bytes.")
                     elif size is not None and destination.stat().st_size != size:
                         fail(f"Local file size mismatch (expected {size} bytes).")
                     elif checksum and sha256_file(destination) != checksum:
@@ -587,6 +599,9 @@ def main(argv: list[str] | None = None) -> int:
                         print("  File present; no checksum provided (integrity unverified).")
                     continue
                 if destination.is_file() and destination.stat().st_size > 0:
+                    if args.max_file_size is not None and destination.stat().st_size > args.max_file_size:
+                        fail(f"Existing file exceeds --max-file-size {args.max_file_size} bytes.")
+                        continue
                     if (size is None or destination.stat().st_size == size) and (
                         checksum is None or sha256_file(destination) == checksum
                     ):
@@ -617,6 +632,8 @@ def main(argv: list[str] | None = None) -> int:
                     command.extend(["--cookies", str(cookies)])
                 if args.rate_limit is not None:
                     command.extend(["--limit-rate", str(args.rate_limit)])
+                if args.max_file_size is not None:
+                    command.extend(["--max-filesize", str(args.max_file_size)])
                 command.append(f"https://drive.google.com/file/d/{file_id}/view")
                 failure = None
                 for attempt in range(1, args.attempts + 1):
@@ -655,6 +672,8 @@ def main(argv: list[str] | None = None) -> int:
                         if result.returncode == 0:
                             if not destination.is_file() or destination.stat().st_size == 0:
                                 failure = "Downloader succeeded but output file is missing or empty."
+                            elif args.max_file_size is not None and destination.stat().st_size > args.max_file_size:
+                                failure = f"Downloaded file exceeds --max-file-size {args.max_file_size} bytes."
                             elif size is not None and destination.stat().st_size != size:
                                 failure = f"Downloaded file size mismatch (expected {size} bytes)."
                             elif checksum and sha256_file(destination) != checksum:
