@@ -262,8 +262,12 @@ from earlier batches are retained; when an entry is processed again, a
 successful outcome removes its old retry record, while a failed outcome
 replaces that record without duplicates. An interrupted pending item keeps
 its previous record. An empty selection does not clear the retained retry
-manifest. Without `--retain-failures`, each run replaces the retry list as
-before. Use a separate input manifest when retrying failures, since an
+manifest. Checkpoints now include `unresolved_failures`, the total number of
+entries still requiring a retry across all retained batches, distinct from
+`failed` (failures encountered in the current batch). With
+`--retain-failures`, the program exits nonzero while that unresolved count
+is positive, even for an empty or otherwise successful batch. Without
+`--retain-failures`, each run replaces the retry list as before. Use a separate input manifest when retrying failures, since an
 output retry manifest cannot overwrite the active input manifest.
 
 Download files you are authorized to access:
