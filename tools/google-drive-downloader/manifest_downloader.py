@@ -265,6 +265,22 @@ def main(argv: list[str] | None = None) -> int:
     failed = 0
     failed_entries = {}
     outcomes = []
+    def publish_status() -> None:
+        if not args.status_out or args.dry_run:
+            return
+        counts = {}
+        for item in outcomes:
+            status = item["status"]
+            counts[status] = counts.get(status, 0) + 1
+        report = {
+            "schema_version": 1,
+            "selected": len(downloads),
+            "processed": len(outcomes),
+            "counts": counts,
+            "files": outcomes,
+        }
+        write_retry_manifest(args.status_out.expanduser(), report)
+
     for index, (file_id, relative, checksum, size) in enumerate(downloads, start=1):
         destination = root / relative
         outcome = {"path": relative.as_posix(), "status": "pending"}
@@ -283,93 +299,85 @@ def main(argv: list[str] | None = None) -> int:
             failed_entries.setdefault(relative.parent.as_posix(), []).append(item)
             print(f"  {reason}", file=sys.stderr)
 
-        if args.dry_run:
-            outcome["status"] = "planned"
-            continue
-        if not destination_is_safe(destination, root):
-            fail("Symlink destination refused.")
-            continue
-        if args.verify_only:
-            if not destination.is_file():
-                fail("Missing or non-regular local file.")
-            elif destination.stat().st_size == 0:
-                fail("Local file is empty.")
-            elif size is not None and destination.stat().st_size != size:
-                fail(f"Local file size mismatch (expected {size} bytes).")
-            elif checksum and sha256_file(destination) != checksum:
-                fail("Local file SHA-256 mismatch.")
-            elif checksum:
-                outcome["status"] = "verified"
-                print("  SHA-256 verified.")
-            elif size is not None:
-                outcome["status"] = "size-checked"
-                print("  File size verified; no checksum provided (integrity unverified).")
-            else:
-                outcome["status"] = "present"
-                print("  File present; no checksum provided (integrity unverified).")
-            continue
-        if destination.is_file() and destination.stat().st_size > 0:
-            if (size is None or destination.stat().st_size == size) and (
-                checksum is None or sha256_file(destination) == checksum
-            ):
-                outcome["status"] = "skipped"
-                print("  Already exists; skipped.")
+        try:
+            if args.dry_run:
+                outcome["status"] = "planned"
                 continue
-            fail("Existing file size or checksum mismatch; refusing overwrite.")
-            continue
-        if destination.exists() and not destination.is_file():
-            fail("Destination is not a regular file; skipped.")
-            continue
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        command = [
-            sys.executable, "-m", "yt_dlp",
-            "--continue",
-            "--no-playlist",
-            "--format", "best[ext=mp4]/best",
-            "--output", str(destination),
-        ]
-        if cookies:
-            command.extend(["--cookies", str(cookies)])
-        command.append(f"https://drive.google.com/file/d/{file_id}/view")
-        failure = None
-        for attempt in range(1, args.attempts + 1):
-            try:
-                result = subprocess.run(command, check=False)
-            except OSError as exc:
-                failure = f"Could not launch downloader: {exc}"
-                break
-            if result.returncode == 0:
-                if not destination.is_file() or destination.stat().st_size == 0:
-                    failure = "Downloader succeeded but output file is missing or empty."
+            if not destination_is_safe(destination, root):
+                fail("Symlink destination refused.")
+                continue
+            if args.verify_only:
+                if not destination.is_file():
+                    fail("Missing or non-regular local file.")
+                elif destination.stat().st_size == 0:
+                    fail("Local file is empty.")
                 elif size is not None and destination.stat().st_size != size:
-                    failure = f"Downloaded file size mismatch (expected {size} bytes)."
+                    fail(f"Local file size mismatch (expected {size} bytes).")
                 elif checksum and sha256_file(destination) != checksum:
-                    failure = "Downloaded file SHA-256 mismatch."
+                    fail("Local file SHA-256 mismatch.")
+                elif checksum:
+                    outcome["status"] = "verified"
+                    print("  SHA-256 verified.")
+                elif size is not None:
+                    outcome["status"] = "size-checked"
+                    print("  File size verified; no checksum provided (integrity unverified).")
                 else:
-                    failure = None
-                break
-            failure = f"Download failed (exit {result.returncode})."
-            if attempt < args.attempts:
-                delay = min(args.retry_delay * (2 ** (attempt - 1)), 60.0)
-                print(f"  Retry {attempt + 1}/{args.attempts} in {delay:g}s.", flush=True)
-                time.sleep(delay)
-        if failure:
-            fail(failure)
-        else:
-            outcome["status"] = "downloaded"
+                    outcome["status"] = "present"
+                    print("  File present; no checksum provided (integrity unverified).")
+                continue
+            if destination.is_file() and destination.stat().st_size > 0:
+                if (size is None or destination.stat().st_size == size) and (
+                    checksum is None or sha256_file(destination) == checksum
+                ):
+                    outcome["status"] = "skipped"
+                    print("  Already exists; skipped.")
+                    continue
+                fail("Existing file size or checksum mismatch; refusing overwrite.")
+                continue
+            if destination.exists() and not destination.is_file():
+                fail("Destination is not a regular file; skipped.")
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            command = [
+                sys.executable, "-m", "yt_dlp",
+                "--continue",
+                "--no-playlist",
+                "--format", "best[ext=mp4]/best",
+                "--output", str(destination),
+            ]
+            if cookies:
+                command.extend(["--cookies", str(cookies)])
+            command.append(f"https://drive.google.com/file/d/{file_id}/view")
+            failure = None
+            for attempt in range(1, args.attempts + 1):
+                try:
+                    result = subprocess.run(command, check=False)
+                except OSError as exc:
+                    failure = f"Could not launch downloader: {exc}"
+                    break
+                if result.returncode == 0:
+                    if not destination.is_file() or destination.stat().st_size == 0:
+                        failure = "Downloader succeeded but output file is missing or empty."
+                    elif size is not None and destination.stat().st_size != size:
+                        failure = f"Downloaded file size mismatch (expected {size} bytes)."
+                    elif checksum and sha256_file(destination) != checksum:
+                        failure = "Downloaded file SHA-256 mismatch."
+                    else:
+                        failure = None
+                    break
+                failure = f"Download failed (exit {result.returncode})."
+                if attempt < args.attempts:
+                    delay = min(args.retry_delay * (2 ** (attempt - 1)), 60.0)
+                    print(f"  Retry {attempt + 1}/{args.attempts} in {delay:g}s.", flush=True)
+                    time.sleep(delay)
+            if failure:
+                fail(failure)
+            else:
+                outcome["status"] = "downloaded"
+        finally:
+            publish_status()
 
     if args.status_out and not args.dry_run:
-        counts = {}
-        for item in outcomes:
-            status = item["status"]
-            counts[status] = counts.get(status, 0) + 1
-        report = {"schema_version": 1, "selected": len(downloads),
-                  "counts": counts, "files": outcomes}
-        try:
-            write_retry_manifest(args.status_out.expanduser(), report)
-        except (OSError, ValueError) as exc:
-            print(f"Failed to write status report: {exc}", file=sys.stderr)
-            return 1
         print(f"Status report written: {args.status_out}")
 
     if args.failed_manifest and not args.dry_run:
