@@ -179,6 +179,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Inspect local destinations and partial files in --plan-out")
     parser.add_argument("--fail-on-blocked-plan", action="store_true",
                         help="In dry-run, exit nonzero if the inspected plan contains blocked files")
+    parser.add_argument("--fail-on-unknown-size-plan", action="store_true",
+                        help="In dry-run, exit nonzero if actionable files have unknown transfer sizes")
     parser.add_argument("--cursor-out", type=Path,
                         help="Write a JSON checkpoint containing the last processed path")
     parser.add_argument("--folder", action="append", default=[],
@@ -205,6 +207,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--plan-inspect-local requires --plan-out")
     if args.fail_on_blocked_plan and not (args.plan_inspect_local and args.dry_run):
         parser.error("--fail-on-blocked-plan requires --plan-inspect-local and --dry-run")
+    if args.fail_on_unknown_size_plan and not (args.plan_inspect_local and args.dry_run):
+        parser.error("--fail-on-unknown-size-plan requires --plan-inspect-local and --dry-run")
     if args.only_failed and not args.retain_failures:
         parser.error("--only-failed requires --retain-failures")
     if args.only_failed and (args.after is not None or args.cursor_in or args.offset or args.cursor_out):
@@ -632,6 +636,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Failed to write batch plan: {exc}", file=sys.stderr)
             return 1
         print(f"Batch plan written: {args.plan_out}")
+        preflight_failed = False
         if args.fail_on_blocked_plan:
             blocked = plan["local_inspection"]["blocked_or_invalid"]
             if blocked:
@@ -639,7 +644,18 @@ def main(argv: list[str] | None = None) -> int:
                     f"Preflight blocked: {blocked} selected file(s) cannot proceed.",
                     file=sys.stderr,
                 )
-                return 1
+                preflight_failed = True
+        if args.fail_on_unknown_size_plan:
+            unknown = plan["local_inspection"]["unknown_estimate_count"]
+            if unknown:
+                print(
+                    f"Preflight blocked: {unknown} actionable file(s) have "
+                    "unknown remaining transfer sizes.",
+                    file=sys.stderr,
+                )
+                preflight_failed = True
+        if preflight_failed:
+            return 1
     cookies = args.cookies.expanduser().resolve() if args.cookies else None
     if cookies and not args.verify_only and not args.dry_run and not cookies.is_file():
         parser.error(f"Cookies file does not exist: {cookies}")
