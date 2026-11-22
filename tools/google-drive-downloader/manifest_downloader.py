@@ -151,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-sha256", action="store_true",
                         help="Reject selected files without an expected SHA-256 digest")
     parser.add_argument("--attempts", type=int, default=3)
+    parser.add_argument("--max-total-attempts", type=int, metavar="COUNT",
+                        help="Cap total yt-dlp subprocess attempts across the batch")
     parser.add_argument("--max-failures", type=int,
                         help="Stop the batch after N failed files (default: no limit)")
     parser.add_argument("--retry-delay", type=float, default=2.0)
@@ -327,6 +329,8 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error(f"Invalid checkpoint cursor: {exc}")
     if args.attempts < 1 or not math.isfinite(args.retry_delay) or not 0 <= args.retry_delay <= 3600:
         parser.error("Require --attempts >= 1 and 0 <= --retry-delay <= 3600")
+    if args.max_total_attempts is not None and args.max_total_attempts < 1:
+        parser.error("--max-total-attempts must be a positive integer")
     if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
         parser.error("--timeout must be a finite number greater than zero")
     if args.min_free_space < 0:
@@ -892,6 +896,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"Cookies file does not exist: {cookies}")
 
     failed = 0
+    attempts_used = 0
     outcomes = []
     def unresolved_failure_count() -> int:
         return sum(len(items) for items in failed_entries.values())
@@ -967,6 +972,12 @@ def main(argv: list[str] | None = None) -> int:
                 item.get("integrity_verified") is True for item in outcomes
             ),
             "download_attempts": sum(item.get("download_attempts", 0) for item in outcomes),
+            "max_total_attempts": args.max_total_attempts,
+            "attempt_budget_exhausted": (
+                args.max_total_attempts is not None
+                and attempts_used >= args.max_total_attempts
+                and len(outcomes) < len(downloads)
+            ),
             "attempt_outcomes": {
                 status: sum(
                     attempt["outcome"] == status
@@ -1088,6 +1099,12 @@ def main(argv: list[str] | None = None) -> int:
             # already been atomically journaled by the per-file finally block.
             if args.max_failures is not None and failed >= args.max_failures:
                 print(f"Stopping batch after {failed} failed files.", file=sys.stderr)
+                break
+            if args.max_total_attempts is not None and attempts_used >= args.max_total_attempts:
+                print(
+                    f"Stopping batch after {attempts_used} downloader attempts.",
+                    file=sys.stderr,
+                )
                 break
             destination = root / relative
             outcome = {"path": relative.as_posix(), "status": "pending"}
@@ -1256,6 +1273,15 @@ def main(argv: list[str] | None = None) -> int:
                 outcome["download_elapsed_seconds"] = 0.0
                 outcome["attempt_history"] = []
                 for attempt in range(1, args.attempts + 1):
+                    if (
+                        args.max_total_attempts is not None
+                        and attempts_used >= args.max_total_attempts
+                    ):
+                        failure = (
+                            f"Batch attempt budget exhausted after {attempts_used} "
+                            "downloader attempts."
+                        )
+                        break
                     # A failed attempt may have left a larger partial file.
                     # Reject that state even if the free-space reserve is off.
                     if part_path.is_symlink() or (
@@ -1303,6 +1329,7 @@ def main(argv: list[str] | None = None) -> int:
                     attempt_started = time.monotonic()
                     attempt_record = {"attempt": attempt, "outcome": "launch_failed"}
                     outcome["download_attempts"] += 1
+                    attempts_used += 1
                     try:
                         result = subprocess.run(
                             command, check=False, timeout=args.timeout,
@@ -1346,6 +1373,12 @@ def main(argv: list[str] | None = None) -> int:
                         failure = f"Download failed (exit {result.returncode})."
                         attempt_record["failure_reason"] = failure
                     if attempt < args.attempts:
+                        if (
+                            args.max_total_attempts is not None
+                            and attempts_used >= args.max_total_attempts
+                        ):
+                            outcome["attempt_budget_exhausted"] = True
+                            break
                         delay = min(args.retry_delay * (2 ** (attempt - 1)), 60.0)
                         attempt_record["retry_delay_seconds"] = delay
                         print(f"  Retry {attempt + 1}/{args.attempts} in {delay:g}s.", flush=True)
@@ -1407,7 +1440,12 @@ def main(argv: list[str] | None = None) -> int:
     unresolved = unresolved_failure_count()
     if args.retain_failures and unresolved:
         print(f"Unresolved retry entries: {unresolved}.", file=sys.stderr)
-    return 1 if failed or (args.retain_failures and unresolved) else 0
+    budget_left_unprocessed = (
+        args.max_total_attempts is not None
+        and attempts_used >= args.max_total_attempts
+        and processed < len(downloads)
+    )
+    return 1 if failed or (args.retain_failures and unresolved) or budget_left_unprocessed else 0
 
 
 if __name__ == "__main__":
