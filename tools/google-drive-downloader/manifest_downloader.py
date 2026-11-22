@@ -952,6 +952,18 @@ def main(argv: list[str] | None = None) -> int:
         }
         write_retry_manifest(args.cursor_out.expanduser(), checkpoint)
 
+    def restore_backup_without_overwrite(backup: Path, target: Path) -> None:
+        """Restore a same-filesystem regular file without clobbering target.
+
+        An exclusive hardlink creation fails when another process creates
+        the target after the existence check. The backup remains intact
+        until the target name has been safely installed.
+        """
+        if backup.is_symlink() or not backup.is_file():
+            raise OSError(f"Quarantine backup is not a regular file: {backup}")
+        os.link(backup, target, follow_symlinks=False)
+        backup.unlink()
+
     def restore_quarantine_after_failure(outcome: dict, destination: Path) -> None:
         """Restore preserved originals after any per-file failure, if safe."""
         if not args.restore_quarantine_on_failure or "quarantined_backup" not in outcome:
@@ -971,7 +983,7 @@ def main(argv: list[str] | None = None) -> int:
             outcome["quarantine_restore"] = "deferred_outputs_present"
             return
         try:
-            original_backup.rename(destination)
+            restore_backup_without_overwrite(original_backup, destination)
         except OSError as exc:
             outcome["quarantine_restore"] = "original_restore_failed"
             outcome["quarantine_restore_error"] = str(exc)
@@ -980,7 +992,7 @@ def main(argv: list[str] | None = None) -> int:
         outcome.pop("quarantined_backup", None)
         if partial_backup is not None:
             try:
-                partial_backup.rename(part_path)
+                restore_backup_without_overwrite(partial_backup, part_path)
             except OSError as exc:
                 outcome["quarantine_restore"] = "partial_restore_failed"
                 outcome["quarantine_restore_error"] = str(exc)
